@@ -1,6 +1,6 @@
 {
   "name": "@dialogai/dialog-class",
-  "version": "2.0.0",
+  "version": "2.0.1",
   "description": "Мощный и гибкий класс для создания и управления AI-диалогами с поддержкой различных языковых моделей, инструментов и сохранения состояния",
   "main": "dialog-class.js",
   "keywords": [
@@ -19,7 +19,7 @@
     "tools",
     "agents"
   ],
-    "author": "Eugene Ditkovsky",
+  "author": "Eugene Ditkovsky",
   "license": "ISC",
   "repository": {
     "type": "git",
