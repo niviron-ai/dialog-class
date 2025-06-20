@@ -1,0 +1,20 @@
+{
+  "dependencies": {
+    "@dialogai/ydb-chat-history": "^2.0.0",
+    "@dieugene/billing": "^1.0.9",
+    "@dieugene/key-value-db": "^1.0.0",
+    "@dieugene/utils": "^1.15.40",
+    "@langchain/anthropic": "0.3.12",
+    "@langchain/core": "^0.2.23",
+    "@langchain/openai": "^0.2.6"
+  },
+  "name": "@dialogai/dialog-class",
+  "version": "2.0.0",
+  "description": "",
+  "main": "dialog-class.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "Eugene Ditkovsky",
+  "license": "ISC"
+}
