@@ -1,4 +1,48 @@
 {
+  "name": "@dialogai/dialog-class",
+  "version": "2.0.0",
+  "description": "Мощный и гибкий класс для создания и управления AI-диалогами с поддержкой различных языковых моделей, инструментов и сохранения состояния",
+  "main": "dialog-class.js",
+  "keywords": [
+    "ai",
+    "dialog",
+    "chatbot",
+    "langchain",
+    "openai",
+    "anthropic",
+    "gpt",
+    "claude",
+    "conversation",
+    "llm",
+    "language-model",
+    "chat-history",
+    "tools",
+    "agents"
+  ],
+    "author": "Eugene Ditkovsky",
+  "license": "ISC",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/niviron-ai/dialog-class.git"
+  },
+  "homepage": "https://github.com/niviron-ai/dialog-class#readme",
+  "bugs": {
+    "url": "https://github.com/niviron-ai/dialog-class/issues"
+  },
+  "files": [
+    "dialog-class.js",
+    "README.md",
+    "package.json"
+  ],
+  "engines": {
+    "node": ">=16.0.0"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
   "dependencies": {
     "@dialogai/ydb-chat-history": "^2.0.0",
     "@dieugene/billing": "^1.0.9",
@@ -6,15 +50,7 @@
     "@dieugene/utils": "^1.15.40",
     "@langchain/anthropic": "0.3.12",
     "@langchain/core": "^0.2.23",
-    "@langchain/openai": "^0.2.6"
-  },
-  "name": "@dialogai/dialog-class",
-  "version": "2.0.0",
-  "description": "",
-  "main": "dialog-class.js",
-  "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
-  },
-  "author": "Eugene Ditkovsky",
-  "license": "ISC"
+    "@langchain/openai": "^0.2.6",
+    "@langchain/langgraph": "^0.2.0"
+  }
 }
