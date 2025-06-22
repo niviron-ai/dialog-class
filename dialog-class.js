@@ -816,16 +816,6 @@ let instruction_message_wrap = `
 Данное сообщение не комментируй.
 `;
 
-let llm = new ChatOpenAI({
-        apiKey: process.env.OPENAI_API_KEY,
-        modelName: "gpt-4o",
-        temperature: 0,
-        configuration: {
-            basePath: process.env.PROXY_URL,
-            baseURL: process.env.PROXY_URL
-        }
-    });
-
 /**
  *
  * @param user
@@ -834,7 +824,7 @@ let llm = new ChatOpenAI({
  * @param chain_llm
  * @returns {*}
  */
-function get_chain_common({user, service, comment, chain_llm = llm} = {}) {
+function get_chain_common({user, service, comment, chain_llm} = {}) {
     I.log('DIALOG :: GET COMMON CHAIN :: LLM :: MODEL NAME :: ', chain_llm.modelName);
     return billing.llm.apply_usage(chain_llm, {user, service, comment});
 }
