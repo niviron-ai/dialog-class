@@ -140,7 +140,9 @@ class Dialog {
     }
 
     log_tagged(tag = '', ...args) {
-        if (this.logging_tags.includes(tag)) console.log(...args);
+        const logEnv = process.env.LOG || '';
+        if (logEnv.includes('DIALOG') &&
+            this.logging_tags.includes(tag)) console.log(...args);
     }
 
     set_llm({modelName = "gpt-4o", temperature = 0, schema, provider = 'openai'} = {}) {
