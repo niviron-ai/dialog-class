@@ -80,7 +80,7 @@ class Dialog {
         limit: 7
     };
     callbacks = [];
-    logging_tags = []; // log_incoming_messages, log_summarizing_process
+    logging_tags = []; // log_incoming_messages, log_summarizing_process, log_verbose
     constructor({
                     session_id,                                 /*  Идентификтор диалога (как правило - идентификатор
                                                                     пользователя)                                       */
@@ -748,7 +748,7 @@ ${response.content}`;
             this.log_tagged('log_verbose', '[DIALOG_VERBOSE] Invoke - initial messages prepared, count:', messages.length, 'types:', messages.map(m => m._getType()));
             
             let agent = this.build();
-            this.log_tagged('log_verbose', '[DIALOG_VERBOSE] Invoke - agent built, invoking with messages');
+            this.log_tagged('log_verbose', '[DIALOG_VERBOSE] Invoke - agent built, invoking with messages', JSON.stringify(messages));
             
             result = await agent.invoke({ messages }, this.agent_config);
             this.log_tagged('log_verbose', '[DIALOG_VERBOSE] Invoke - agent invoked, result_messages_count:', result.messages ? result.messages.length : 0);
