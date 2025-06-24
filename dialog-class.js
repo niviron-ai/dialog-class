@@ -116,6 +116,8 @@ class Dialog {
                                                                     - on_invoke_end                                     */
                     database
                 } = {}) {
+        this.log_tagged('log_verbose', '[DIALOG_VERBOSE] Constructor START - session_id:', session_id, 'dialog_code:', dialog_code, 'alias:', alias);
+        
         this.database = database;
         this.db = db.init('DIALOG_DATA', {database});
         this.llm = Dialog.get_llm({modelName, provider});
@@ -133,6 +135,8 @@ class Dialog {
             }};
         if (tool_name) this.tool_data.name = tool_name;
         if (tool_description) this.tool_data.description = tool_description;
+        
+        this.log_tagged('log_verbose', '[DIALOG_VERBOSE] Constructor END - final_session_id:', this.session_id, 'tools_count:', this.tools.length, 'callbacks_count:', this.callbacks.length);
     }
 
     log_tagged(tag = '', ...args) {
@@ -251,10 +255,15 @@ class Dialog {
      * @returns {Promise<*>}
      */
     async restore() {
+        this.log_tagged('log_verbose', '[DIALOG_VERBOSE] Restore START - session_id:', this.session_id, 'is_restored:', this.is_restored);
+        
         if (this.is_restored) return;
         this.is_restored = true;
         let data = await this.db.get(this.session_id),
             is_restorable = key => !this.restorable_exceptions.includes(key);
+            
+        this.log_tagged('log_verbose', '[DIALOG_VERBOSE] Restore - data from DB:', JSON.stringify(data));
+        
         if (!data) return;
         this.storables.forEach(key => this.storage[key] = data[key]);
         this.restorable
@@ -272,6 +281,8 @@ class Dialog {
                 .filter(cb => typeof cb.on_restore_end === 'function')
                 .map(cb => cb.on_restore_end())
         );
+        
+        this.log_tagged('log_verbose', '[DIALOG_VERBOSE] Restore END - restored_data:', JSON.stringify(this.data()));
         return this;
     }
 
@@ -319,7 +330,10 @@ class Dialog {
      * @returns { YdbChatMessageHistory }
      */
     history() {
-        return get_session_history(this.session_id)
+        this.log_tagged('log_verbose', '[DIALOG_VERBOSE] History called - session_id:', this.session_id);
+        let history = get_session_history(this.session_id);
+        this.log_tagged('log_verbose', '[DIALOG_VERBOSE] History created - constructor_name:', history.constructor.name);
+        return history;
     }
 
     /**
@@ -407,15 +421,24 @@ class Dialog {
      * @returns {Promise<void>}
      */
     async update_history(messages=[]) {
+        this.log_tagged('log_verbose', '[DIALOG_VERBOSE] Update_history START - incoming_messages_count:', messages.length);
 
         function filter_messages(session_messages) {
             return session_messages.filter(x => !is_instruction(x))
         }
 
         let history = this.history();
+        
+        this.log_tagged('log_verbose', '[DIALOG_VERBOSE] Update_history - getting messages from history');
+        let history_messages = await history.getMessages();
+        this.log_tagged('log_verbose', '[DIALOG_VERBOSE] Update_history - history_messages_count:', history_messages.length, 'history_messages_types:', history_messages.map(m => m._getType ? m._getType() : 'NO_GET_TYPE'));
 
-        this.session_messages = [...await history.getMessages(), ...messages];
-        this.session_history = Dialog.stringify_messages(filter_messages(this.session_messages), {ai_alias: this.alias}).trim()
+        this.session_messages = [...history_messages, ...messages];
+        this.log_tagged('log_verbose', '[DIALOG_VERBOSE] Update_history - session_messages_count:', this.session_messages.length, 'session_messages_types:', this.session_messages.map(m => m._getType ? m._getType() : 'NO_GET_TYPE'));
+        
+        this.session_history = Dialog.stringify_messages(filter_messages(this.session_messages), {ai_alias: this.alias}).trim();
+        
+        this.log_tagged('log_verbose', '[DIALOG_VERBOSE] Update_history END - session_history_length:', this.session_history.length);
     }
 
     /**
@@ -423,6 +446,7 @@ class Dialog {
      * @returns {Promise<void>}
      */
     async summarize_chat() {
+        this.log_tagged('log_verbose', '[DIALOG_VERBOSE] Summarize_chat START - session_id:', this.session_id, 'summary_config_threshold:', this.summary_config.threshold, 'summary_config_limit:', this.summary_config.limit);
         /*
         https://js.langchain.com/docs/troubleshooting/errors/INVALID_TOOL_RESULTS/
          */
@@ -464,11 +488,17 @@ class Dialog {
 
         let self = this,
             history = this.history(),
-            limit = this.summary_config.limit,
-            all_messages = await history.getMessages(),
-            summarize_structure = get_summarize_structure(all_messages, limit);
+            limit = this.summary_config.limit;
+            
+        this.log_tagged('log_verbose', '[DIALOG_VERBOSE] Summarize_chat - getting all messages from history');
+        let all_messages = await history.getMessages();
+        this.log_tagged('log_verbose', '[DIALOG_VERBOSE] Summarize_chat - all_messages_count:', all_messages.length, 'all_messages_types:', all_messages.map(m => m._getType ? m._getType() : 'NO_GET_TYPE'));
+        
+        let summarize_structure = get_summarize_structure(all_messages, limit);
 
         if (!summarize_structure) return this.log_tagged('log_summarizing_process', 'summarize_structure is NEGATIVE');
+        
+        this.log_tagged('log_verbose', '[DIALOG_VERBOSE] Summarize_chat - summarize_structure created, messages_to_summarize_count:', summarize_structure.messages_to_summarize.length, 'new_history_count:', summarize_structure.new_history.length);
         I.log('DIALOG :: ' + this.alias + ' :: SUMMARIZE CHAT IS INVOKED :: HISTORY ::', JSON.stringify(summarize_structure));
 
         let summary = this.session_summary,
@@ -496,12 +526,17 @@ ${summary}
         let messages = [
                 ...summarize_structure.messages_to_summarize,
                 new HumanMessage(summary_message)
-            ],
-            response = await chain.invoke(messages),
+            ];
+            
+        this.log_tagged('log_verbose', '[DIALOG_VERBOSE] Summarize_chat - invoking chain with messages_count:', messages.length, 'messages_types:', messages.map(m => m._getType ? m._getType() : 'NO_GET_TYPE'));
+        
+        let response = await chain.invoke(messages),
             summary_add_on = `
 Прими во внимание краткое описание того, о чем мы общались ранее, представленное ниже
 ============
 ${response.content}`;
+
+        this.log_tagged('log_verbose', '[DIALOG_VERBOSE] Summarize_chat - chain response received, content_length:', response.content.length);
 
         this.session_summary = response.content;
         await history.clear();
@@ -510,18 +545,22 @@ ${response.content}`;
             ...summarize_structure.new_history
         ];
 
+        this.log_tagged('log_verbose', '[DIALOG_VERBOSE] Summarize_chat - new_history prepared, count:', new_history.length, 'types:', new_history.map(m => m._getType ? m._getType() : 'NO_GET_TYPE'));
+
         history.backup()
             .then(
                 () => history.clear()
                     .then(
                         () => history.addMessages(new_history)
-                            .then(() =>
+                            .then(() => {
+                                this.log_tagged('log_verbose', '[DIALOG_VERBOSE] Summarize_chat - new history saved to DB');
                                 I.log('DIALOG :: SUMMARIZE CHAT :: ' +
-                                    'NEW CHAT HISTORY IS SAVED ::', JSON.stringify(new_history))
-                            )
+                                    'NEW CHAT HISTORY IS SAVED ::', JSON.stringify(new_history));
+                            })
                     )
             );
-
+        
+        this.log_tagged('log_verbose', '[DIALOG_VERBOSE] Summarize_chat END - session_summary_length:', this.session_summary.length);
     }
 
     /**
@@ -531,15 +570,25 @@ ${response.content}`;
      * @returns {Promise<*>}
      */
     async gen_message(human_msg, messages = []) {
+        this.log_tagged('log_verbose', '[DIALOG_VERBOSE] Gen_message START - human_msg_length:', human_msg.length, 'messages_count:', messages.length, 'messages_types:', messages.map(m => m._getType ? m._getType() : 'NO_GET_TYPE'));
+        
         await this.pre_check(human_msg, messages);
         if (this.stop_dialog_condition('inside')) return await this.stop(true);
         let retries = 0, result;
         do {
             retries++;
+            this.log_tagged('log_verbose', '[DIALOG_VERBOSE] Gen_message - retry attempt:', retries, 'temp_instructions_count:', this.temp_instructions.length);
+            
             let agent = this.build(true);
-            result = await agent.invoke({ messages: [...this.temp_instructions, ...messages]}, this.agent_config);
+            let invoke_messages = [...this.temp_instructions, ...messages];
+            this.log_tagged('log_verbose', '[DIALOG_VERBOSE] Gen_message - invoking agent with messages_count:', invoke_messages.length, 'messages_types:', invoke_messages.map(m => m._getType ? m._getType() : 'NO_GET_TYPE'));
+            
+            result = await agent.invoke({ messages: invoke_messages}, this.agent_config);
+            this.log_tagged('log_verbose', '[DIALOG_VERBOSE] Gen_message - agent result, messages_count:', result.messages ? result.messages.length : 0, 'last_message_type:', result.messages ? lastOf(result.messages)._getType() : 'NO_LAST_MESSAGE');
             // result = lastOf(result.messages)
         } while (retries < 10 && !await this.post_check(lastOf(result.messages).content));
+        
+        this.log_tagged('log_verbose', '[DIALOG_VERBOSE] Gen_message END - final_retries:', retries, 'result_messages_count:', result.messages ? result.messages.length : 0);
         return result
     }
 
@@ -557,17 +606,27 @@ ${response.content}`;
     }
 
     build(readOnly = false) {
+        this.log_tagged('log_verbose', '[DIALOG_VERBOSE] Build START - readOnly:', readOnly, 'tools_count:', this.tools.length);
+        
         let self = this,
             wayToContinue = state => { // -> один из вариантов: 'tool_node', 'summarize_chat', END
-                let toolCalls = lastOf(state.messages).additional_kwargs.tool_calls;
+                self.log_tagged('log_verbose', '[DIALOG_VERBOSE] Build.wayToContinue - state_messages_count:', state.messages ? state.messages.length : 0);
+                let lastMessage = lastOf(state.messages);
+                self.log_tagged('log_verbose', '[DIALOG_VERBOSE] Build.wayToContinue - lastMessage_type:', lastMessage ? lastMessage._getType() : 'NO_MESSAGE');
+                
+                let toolCalls = lastMessage.additional_kwargs.tool_calls;
                 if (toolCalls) {
                     self.is_tool_activated = true;
+                    self.log_tagged('log_verbose', '[DIALOG_VERBOSE] Build.wayToContinue - tool_calls detected, count:', toolCalls.length);
                     return 'tool_node';
                 }
+                self.log_tagged('log_verbose', '[DIALOG_VERBOSE] Build.wayToContinue - no tool_calls, returning END');
                 return END;
             },
             // Define the function that calls the model
             callModel = async state => {
+                self.log_tagged('log_verbose', '[DIALOG_VERBOSE] Build.callModel START - state_messages_count:', state.messages ? state.messages.length : 0, 'state_messages_types:', state.messages ? state.messages.map(m => m._getType ? m._getType() : 'NO_GET_TYPE') : []);
+                
                 let llm = self.llm.bindTools(self.tools.map(tool => convertToOpenAITool(tool)));
                 llm.modelName = "gpt-4o";  // .bindTools возвращает не llm, а другой Runnable, поэтому modelName недоступно и нужно явно присвоить.
                 //model = prompt.pipe(llm),
@@ -575,6 +634,8 @@ ${response.content}`;
                 let model = self.get_chain({self, llm, readOnly}),
                     response = await model.invoke(state.messages,
                         {configurable: {sessionId: this.session_id}});
+                        
+                self.log_tagged('log_verbose', '[DIALOG_VERBOSE] Build.callModel - response_type:', response ? response._getType() : 'NO_RESPONSE', 'response_content_length:', response ? response.content.length : 0);
                 I.log('DIALOG :: INVOKE :: CALL MODEL :: RESPONSE', JSON.stringify(response));
                 // We return a list, because this will get added to the existing list
                 return { messages: [response] };
@@ -589,8 +650,11 @@ ${response.content}`;
                     default: () => []
                 },
                 summary: undefined
-            },
-            workflow = new StateGraph({ channels: graphState })
+            };
+            
+        self.log_tagged('log_verbose', '[DIALOG_VERBOSE] Build - creating workflow with graph state');
+        
+        let workflow = new StateGraph({ channels: graphState })
                 .addNode("agent", callModel)
                 .addNode("tool_node", get_custom_tool_node(this.tools, new YdbChatMessageHistory({
                     sessionId: this.session_id, database: this.database, readOnly
@@ -599,6 +663,8 @@ ${response.content}`;
                 .addConditionalEdges("agent", wayToContinue)
                 .addEdge("tool_node", "agent")
         ;
+        
+        self.log_tagged('log_verbose', '[DIALOG_VERBOSE] Build END - workflow created, compiling');
         return workflow.compile();
         // let agent = workflow.compile();
         // https://github.com/langchain-ai/langchain/discussions/21801
@@ -610,53 +676,87 @@ ${response.content}`;
     get_chain({self, llm, readOnly = false} = {}) {
         self = self || this;
         llm = llm || self.llm;
+        
+        self.log_tagged('log_verbose', '[DIALOG_VERBOSE] Get_chain - session_id:', self.session_id, 'readOnly:', readOnly, 'llm_model:', llm.modelName);
+        
         return new RunnableWithMessageHistory({
             runnable: billing.llm.apply_usage(llm, {
                 user: self.get_initial_session_id(),
                 service: self.dialog_code,
                 comment: self.alias
             }),
-            getMessageHistory: (sessionId) =>
-                new YdbChatMessageHistory({ sessionId, readOnly, database: self.database })
+            getMessageHistory: (sessionId) => {
+                self.log_tagged('log_verbose', '[DIALOG_VERBOSE] Get_chain.getMessageHistory - sessionId:', sessionId, 'readOnly:', readOnly);
+                return new YdbChatMessageHistory({ sessionId, readOnly, database: self.database });
+            }
         });
     }
 
     async invoke(human_msg = "Привет") {
+        this.log_tagged('log_verbose', '[DIALOG_VERBOSE] Invoke START - human_msg_length:', human_msg.length, 'session_id:', this.session_id);
         this.log_tagged('log_incoming_messages', 'DIALOG IS INVOKED :: WITH :: ', human_msg);
         // I.log('DIALOG IS INVOKED :: WITH :: ', human_msg);
+        
         await this.restore();
+        this.log_tagged('log_verbose', '[DIALOG_VERBOSE] Invoke - after restore, is_restored:', this.is_restored);
+        
         let result, history = this.history(), self = this, function_scenario = '';
         this.last_human_message = human_msg;
+        
+        this.log_tagged('log_verbose', '[DIALOG_VERBOSE] Invoke - getting session messages from history');
         this.session_messages = await history.getMessages();
+        this.log_tagged('log_verbose', '[DIALOG_VERBOSE] Invoke - session_messages_count:', this.session_messages.length, 'session_messages_types:', this.session_messages.map(m => m._getType ? m._getType() : 'NO_GET_TYPE'));
+        
         if (this.session_messages.length > 0) {
             function_scenario = 'this.session_messages.length > 0';
+            this.log_tagged('log_verbose', '[DIALOG_VERBOSE] Invoke - existing session scenario, checking stop condition');
+            
             if (this.stop_dialog_condition('before')) return await this.stop(); //!!!!!!!!!!!!!!!!!!!!!!
 
             let msg = new HumanMessage(human_msg), messages = [ msg ];
+            this.log_tagged('log_verbose', '[DIALOG_VERBOSE] Invoke - created HumanMessage, type:', msg._getType(), 'content_length:', msg.content.length);
+            
             this.session_messages.push(msg);
             this.session_history = this.utils.stringify_messages(
                 this.utils.exclude_instructions(this.session_messages)
             ).trim();
 
+            this.log_tagged('log_verbose', '[DIALOG_VERBOSE] Invoke - before gen_message, messages_count:', messages.length, 'messages_types:', messages.map(m => m._getType ? m._getType() : 'NO_GET_TYPE'));
             result = await this.gen_message(human_msg, messages);
+            this.log_tagged('log_verbose', '[DIALOG_VERBOSE] Invoke - after gen_message, result_messages_count:', result.messages ? result.messages.length : 0);
 
             if (this.stop_dialog_condition('after')) return await this.stop(true);
             I.log('DIALOG MESSAGES & RESULT');
             I.log('MESSAGES ::', JSON.stringify(messages));
             I.log('RESULT ::', JSON.stringify(result));
             // await history.addMessages([...messages, lastOf(result.messages)]);
+            this.log_tagged('log_verbose', '[DIALOG_VERBOSE] Invoke - adding result messages to history, count:', result.messages ? result.messages.length : 0);
             await history.addMessages([...result.messages]);
         }
         else {
             function_scenario = 'this.session_messages.length === 0';
+            this.log_tagged('log_verbose', '[DIALOG_VERBOSE] Invoke - new session scenario, creating initial messages');
+            
             let initials = [this.start_system_msg, ...this.additional_starting_instructions, default_format_msg].join('\n\n'),
                 messages = [new SystemMessage(initials)];
+                
+            this.log_tagged('log_verbose', '[DIALOG_VERBOSE] Invoke - created SystemMessage, type:', messages[0]._getType(), 'content_length:', messages[0].content.length);
+            
             if (!this.ignore_starting_message && human_msg !== '')
                 messages = [...messages, new HumanMessage(human_msg)];
+                
+            this.log_tagged('log_verbose', '[DIALOG_VERBOSE] Invoke - initial messages prepared, count:', messages.length, 'types:', messages.map(m => m._getType()));
+            
             let agent = this.build();
+            this.log_tagged('log_verbose', '[DIALOG_VERBOSE] Invoke - agent built, invoking with messages');
+            
             result = await agent.invoke({ messages }, this.agent_config);
+            this.log_tagged('log_verbose', '[DIALOG_VERBOSE] Invoke - agent invoked, result_messages_count:', result.messages ? result.messages.length : 0);
         }
+        
         result = lastOf(result.messages);
+        this.log_tagged('log_verbose', '[DIALOG_VERBOSE] Invoke - final result extracted, type:', result ? result._getType() : 'NO_RESULT', 'content_length:', result ? result.content.length : 0);
+        
         if (!result) await logger.critical('WARNING :: ERROR at SUPERVISOR.INVOKE_DIALOG :: INFO', {function_scenario});
         let response = result.content;
         I.log(break_lines(this.alias + ": -- " + response) + '\n\n');
@@ -672,6 +772,8 @@ ${response.content}`;
                 .filter(cb => typeof cb.on_invoke_end === 'function')
                 .map(cb => cb.on_invoke_end())
         );
+        
+        this.log_tagged('log_verbose', '[DIALOG_VERBOSE] Invoke END - response_length:', response.length, 'function_scenario:', function_scenario);
         return response
     }
 
@@ -680,9 +782,18 @@ ${response.content}`;
     }
 
     async check_for_summary_invocation() {
+        this.log_tagged('log_verbose', '[DIALOG_VERBOSE] Check_for_summary_invocation START - session_messages_count:', this.session_messages.length, 'threshold:', this.summary_config.threshold);
         this.log_tagged('log_summarizing_process', 'check_for_summary_invocation INVOKED');
-        if (this.session_messages.length < this.summary_config.threshold) return false;
+        
+        if (this.session_messages.length < this.summary_config.threshold) {
+            this.log_tagged('log_verbose', '[DIALOG_VERBOSE] Check_for_summary_invocation - threshold not reached, returning false');
+            return false;
+        }
+        
+        this.log_tagged('log_verbose', '[DIALOG_VERBOSE] Check_for_summary_invocation - threshold reached, calling summarize_chat');
         await this.summarize_chat();
+        
+        this.log_tagged('log_verbose', '[DIALOG_VERBOSE] Check_for_summary_invocation END - returning true');
         return true
     }
 
@@ -794,16 +905,25 @@ ${response.content}`;
     }
 
     static stringify_messages(messages = [], {ai_alias = 'ai', user_alias = 'Респондент', system_alias = 'System', tool_alias = 'tool'} = {}){
+        console.log('[DIALOG_VERBOSE] Static.stringify_messages - input_messages_count:', messages.length, 'input_messages_types:', messages.map(m => m._getType ? m._getType() : 'NO_GET_TYPE'));
         let d = {'ai': ai_alias, 'human': user_alias, 'system': system_alias, 'tool': tool_alias};
-        return messages.map(msg => d[msg._getType()] + ': -- ' + no_break(msg['content'])).join('\n');
+        let result = messages.map(msg => d[msg._getType()] + ': -- ' + no_break(msg['content'])).join('\n');
+        console.log('[DIALOG_VERBOSE] Static.stringify_messages - result_length:', result.length);
+        return result;
     }
 
     static serialize_messages(messages = []) {
-        return mapChatMessagesToStoredMessages(messages)
+        console.log('[DIALOG_VERBOSE] Static.serialize_messages - input_messages_count:', messages.length, 'input_messages_types:', messages.map(m => m._getType ? m._getType() : 'NO_GET_TYPE'));
+        let result = mapChatMessagesToStoredMessages(messages);
+        console.log('[DIALOG_VERBOSE] Static.serialize_messages - result_count:', result.length);
+        return result;
     }
 
     static deserialize_messages(messages = []) {
-        return mapStoredMessagesToChatMessages(messages)
+        console.log('[DIALOG_VERBOSE] Static.deserialize_messages - input_messages_count:', messages.length);
+        let result = mapStoredMessagesToChatMessages(messages);
+        console.log('[DIALOG_VERBOSE] Static.deserialize_messages - result_count:', result.length, 'result_types:', result.map(m => m._getType ? m._getType() : 'NO_GET_TYPE'));
+        return result;
     }
 }
 
@@ -834,7 +954,10 @@ function get_chain_common({user, service, comment, chain_llm} = {}) {
  * @returns {YdbChatMessageHistory}
  */
 function get_session_history(sessionId) {
-    return new YdbChatMessageHistory({sessionId})
+    console.log('[DIALOG_VERBOSE] get_session_history - sessionId:', sessionId);
+    let history = new YdbChatMessageHistory({sessionId});
+    console.log('[DIALOG_VERBOSE] get_session_history - created history instance, constructor:', history.constructor.name);
+    return history;
 }
 
 function no_break(s = "") {
@@ -870,8 +993,11 @@ function timeout(time = 150) {
 }
 
 function is_instruction(msg, mindTools = true) {
+    console.log('[DIALOG_VERBOSE] is_instruction - checking message type:', msg._getType ? msg._getType() : 'NO_GET_TYPE', 'mindTools:', mindTools);
     let type = msg._getType();
-    return type === 'system' || no_break(msg.content).startsWith('Инструкция: ') || (mindTools && type === 'tool')
+    let result = type === 'system' || no_break(msg.content).startsWith('Инструкция: ') || (mindTools && type === 'tool');
+    console.log('[DIALOG_VERBOSE] is_instruction - result:', result);
+    return result;
 }
 
 function lastOf(arr = []) {return arr[arr.length - 1]}
@@ -889,31 +1015,49 @@ function get_custom_tool_node(tools = [], history) {
         const { messages } = state;
         const lastMessage = messages[messages.length - 1];
         const outputMessages = [];
+        
+        // Добавляем логирование в начале функции
+        console.log('[DIALOG_VERBOSE] get_custom_tool_node START - messages_count:', messages ? messages.length : 0, 'lastMessage_type:', lastMessage ? lastMessage._getType() : 'NO_LAST_MESSAGE', 'tool_calls_count:', lastMessage ? lastMessage.tool_calls.length : 0);
+        
         if (lastMessage.tool_calls.length > 1)
             I.log('CUSTOM TOOL NODE :: GOT', lastMessage.tool_calls.length, 'TOOLS ::', JSON.stringify(lastMessage.tool_calls));
         for (const toolCall of lastMessage.tool_calls) {
             try {
                 I.log('CUSTOM TOOL NODE IS INVOKED :: BEFORE :: ', JSON.stringify(toolCall));
+                console.log('[DIALOG_VERBOSE] get_custom_tool_node - invoking tool:', toolCall.name, 'tool_call_id:', toolCall.id);
+                
                 const toolResult = await toolsByName[toolCall.name].invoke(toolCall);
+                console.log('[DIALOG_VERBOSE] get_custom_tool_node - tool result type:', toolResult ? toolResult._getType() : 'NO_GET_TYPE', 'result_length:', toolResult ? toolResult.content.length : 0);
+                
                 I.log('CUSTOM TOOL NODE IS INVOKED :: AFTER :: ', JSON.stringify(toolResult));
                 outputMessages.push(toolResult);
             } catch (error) {
                 // Return the error if the tool call fails
                 I.log('CUSTOM TOOL NODE ERROR :: Tool name ::', toolCall.name, ':: MESSAGE ::', error.message);
                 I.log('CUSTOM TOOL NODE ERROR :: Tool name ::', toolCall.name, ':: STACK ::', error.stack.replaceAll('\n', ' '));
-                outputMessages.push(
-                    new ToolMessage({
-                        content: error.message,
-                        name: toolCall.name,
-                        tool_call_id: toolCall.id,
-                        additional_kwargs: { error }
-                    })
-                );
+                
+                console.log('[DIALOG_VERBOSE] get_custom_tool_node - tool error:', toolCall.name, 'error_message:', error.message);
+                
+                let errorMessage = new ToolMessage({
+                    content: error.message,
+                    name: toolCall.name,
+                    tool_call_id: toolCall.id,
+                    additional_kwargs: { error }
+                });
+                
+                console.log('[DIALOG_VERBOSE] get_custom_tool_node - created error ToolMessage, type:', errorMessage._getType());
+                outputMessages.push(errorMessage);
             }
         }
+        
+        console.log('[DIALOG_VERBOSE] get_custom_tool_node - outputMessages_count:', outputMessages.length, 'outputMessages_types:', outputMessages.map(m => m._getType ? m._getType() : 'NO_GET_TYPE'));
+        
         // Ради чего весь сыр-бор... Записать результат в историю, чтобы не возникала ошибка
         // https://js.langchain.com/docs/troubleshooting/errors/INVALID_TOOL_RESULTS/
+        console.log('[DIALOG_VERBOSE] get_custom_tool_node - adding messages to history, count:', outputMessages.length);
         await history.addMessages(outputMessages);
+        console.log('[DIALOG_VERBOSE] get_custom_tool_node END - returning messages_count:', outputMessages.length);
+        
         return { messages: outputMessages };
     };
 }
