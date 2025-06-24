@@ -511,7 +511,16 @@ ${summary}
 
 Расширь это резюме исходя из сообщений, представленных выше`
             : 'Сформируй резюме нашего диалога',
-            chain = get_chain_common({
+            chain = new ChatOpenAI({
+                apiKey: process.env.OPENAI_API_KEY,
+                modelName: "gpt-4o-mini",
+                temperature: 0,
+                configuration: {
+                    basePath: process.env.PROXY_URL,
+                    baseURL: process.env.PROXY_URL
+                }
+            });
+            /*chain = get_chain_common({
                 user: this.get_initial_session_id(),
                 service: this.dialog_code,
                 comment: this.alias + ' :: Summarize',
@@ -524,7 +533,7 @@ ${summary}
                         baseURL: process.env.PROXY_URL
                     }
                 })
-            });
+            });*/
 
         let messages = [
                 ...summarize_structure.messages_to_summarize,
@@ -691,11 +700,12 @@ ${response.content}`;
         self.log_tagged('log_verbose', '[DIALOG_VERBOSE] Get_chain - session_id:', self.session_id, 'readOnly:', readOnly, 'llm_model:', llm.modelName);
         
         return new RunnableWithMessageHistory({
-            runnable: billing.llm.apply_usage(llm, {
+            /*runnable: billing.llm.apply_usage(llm, {
                 user: self.get_initial_session_id(),
                 service: self.dialog_code,
                 comment: self.alias
-            }),
+            }),*/
+            runnable: llm,
             getMessageHistory: (sessionId) => {
                 self.log_tagged('log_verbose', '[DIALOG_VERBOSE] Get_chain.getMessageHistory - sessionId:', sessionId, 'readOnly:', readOnly);
                 return new YdbChatMessageHistory({ sessionId, readOnly, database: self.database });
