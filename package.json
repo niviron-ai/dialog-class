@@ -48,9 +48,9 @@
     "@dieugene/billing": "^1.0.9",
     "@dieugene/key-value-db": "^1.0.0",
     "@dieugene/utils": "^1.15.40",
-    "@langchain/anthropic": "0.3.12",
+    "@langchain/anthropic": "^0.3.23",
     "@langchain/core": "^0.3.61",
-    "@langchain/openai": "^0.2.6",
+    "@langchain/openai": "^0.5.15",
     "@langchain/langgraph": "^0.3.5"
   }
 }
