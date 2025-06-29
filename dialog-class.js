@@ -33,6 +33,7 @@ let default_start_system_msg = `
 class Dialog {
     db;
     llm;
+    ctx; // В случае использования с telegraf.js, доступ к объекту вызова
     tools = [];
     observers = [];
     session_messages = []; //# Обращаемся к списку сообщений в разных местах
@@ -79,6 +80,7 @@ class Dialog {
         threshold: 15,
         limit: 7
     };
+    set_messages_dates = true;
     callbacks = [];
     logging_tags = []; // log_incoming_messages, log_summarizing_process, log_verbose
     constructor({
@@ -716,6 +718,10 @@ ${response.content}`;
     }
 
     async invoke(human_msg = "Привет") {
+        if (I.notEmpty(human_msg) && this.set_messages_dates) {
+            let dt = I.getDateISO(null);
+            human_msg += "\n\n[Meta-Data]\nDate: " + dt.date + "\nTime: " + dt.time + "\n[/Meta-Data]";
+        }
         this.log_tagged('log_verbose', '[DIALOG_VERBOSE] Invoke START - human_msg_length:', human_msg.length, 'session_id:', this.session_id);
         this.log_tagged('log_incoming_messages', 'DIALOG IS INVOKED :: WITH :: ', human_msg);
         // I.log('DIALOG IS INVOKED :: WITH :: ', human_msg);
