@@ -51,6 +51,7 @@ class Dialog {
     temp_instructions = [];
     opponent = null;
     alias = "";
+    show_alias = true;
     start_system_msg = "";
     additional_starting_instructions = [];
     ignore_starting_message = false;
