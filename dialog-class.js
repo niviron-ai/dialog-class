@@ -64,6 +64,7 @@ class Dialog {
     response = {
         status_message: '',
         message: '',
+        message_buttons: [], // Массив строк "text::action",
         reply_options: [],
         post_message: undefined, /*{ text: undefined, markup_data: undefined}*/
         post_messages: [],/*{ text: undefined, markup_data: undefined}*/
