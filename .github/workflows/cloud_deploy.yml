@@ -1,0 +1,234 @@
+name: Deploy to Yandex Cloud Function
+
+on:
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          registry-url: 'https://registry.npmjs.org/'
+
+      - name: Install dependencies
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: npm install
+
+      - name: Pack npm package
+        run: npm pack
+
+      - name: Install Yandex Cloud CLI
+        run: |
+          curl -sSL https://storage.yandexcloud.net/yandexcloud-yc/install.sh | bash
+          echo "${HOME}/yandex-cloud/bin" >> $GITHUB_PATH
+
+      - name: Configure Yandex Cloud CLI
+        env:
+          YC_TOKEN: ${{ secrets.YC_TOKEN }}
+        run: |
+          yc config set token $YC_TOKEN
+          yc config set cloud-id ${{ secrets.YC_CLOUD_ID }}
+          yc config set folder-id ${{ secrets.YC_FOLDER_ID }}
+
+      - name: Get current function parameters
+        env:
+          YC_FUNCTION_ID: ${{ secrets.YC_FUNCTION_ID }}
+        run: |
+          # Получаем информацию о текущей функции
+          FUNCTION_INFO=$(yc serverless function version list --function-id $YC_FUNCTION_ID --limit 1 --format json)
+          
+          # Получаем последнюю версию функции
+          LATEST_VERSION=$(echo "$FUNCTION_INFO" | jq -r '.[0].id')
+          
+          if [ "$LATEST_VERSION" != "null" ] && [ -n "$LATEST_VERSION" ]; then
+            # Получаем параметры последней версии
+            VERSION_INFO=$(yc serverless function version get --id $LATEST_VERSION --format json)
+            
+            # Основные параметры
+            RUNTIME=$(echo "$VERSION_INFO" | jq -r '.runtime')
+            ENTRYPOINT=$(echo "$VERSION_INFO" | jq -r '.entrypoint')
+            MEMORY=$(echo "$VERSION_INFO" | jq -r '.resources.memory')
+            TIMEOUT=$(echo "$VERSION_INFO" | jq -r '.execution_timeout' | sed 's/s$//')
+            
+            # Сервисный аккаунт
+            SERVICE_ACCOUNT=$(echo "$VERSION_INFO" | jq -r '.service_account_id // empty')
+            
+            # Переменные и секреты окружения
+            ENV_VARS=$(echo "$VERSION_INFO" | jq -r '.environment // {}' | jq -c .)
+            SECRETS_VARS=$(echo "$VERSION_INFO" | jq -r '.secret // {}' | jq -c .)
+            
+            # Настройки логирования
+            LOG_GROUP_ID=$(echo "$VERSION_INFO" | jq -r '.log_options.log_group_id // empty')
+            LOG_LEVEL=$(echo "$VERSION_INFO" | jq -r '.log_options.min_log_level // "INFO"')
+            
+            # Настройки сети
+            NETWORK_ID=$(echo "$VERSION_INFO" | jq -r '.connectivity.network_id // empty')
+            SUBNET_IDS=$(echo "$VERSION_INFO" | jq -r '.connectivity.subnet_id // empty')
+            
+            # Настройки масштабирования
+            CONCURRENCY=$(echo "$VERSION_INFO" | jq -r '.concurrency // empty')
+            
+            echo "=== Current function parameters ==="
+            echo "Runtime: $RUNTIME"
+            echo "Entrypoint: $ENTRYPOINT"
+            echo "Memory: ${MEMORY}B"
+            echo "Timeout: ${TIMEOUT}s"
+            echo "Service Account: ${SERVICE_ACCOUNT:-'not set'}"
+            echo "Environment Variables: $(COUNT=$(echo "$ENV_VARS" | jq 'length'); [ "$COUNT" -eq 0 ] && echo "none" || echo "$COUNT variables")"
+            echo "Secrets: $(COUNT=$(echo "$SECRETS_VARS" | jq 'length'); [ "$COUNT" -eq 0 ] && echo "none" || echo "$COUNT secrets")"
+            echo "Log Group ID: ${LOG_GROUP_ID:-'not set'}"
+            echo "Log Level: $LOG_LEVEL"
+            echo "Network ID: ${NETWORK_ID:-'not set'}"
+            echo "Subnet IDs: ${SUBNET_IDS:-'not set'}"
+            echo "Concurrency: ${CONCURRENCY:-'not set'}"
+            echo "=================================="
+            
+            # Сохраняем параметры в environment variables
+            echo "FUNC_RUNTIME=$RUNTIME" >> $GITHUB_ENV
+            echo "FUNC_ENTRYPOINT=$ENTRYPOINT" >> $GITHUB_ENV
+            echo "FUNC_MEMORY=$MEMORY" >> $GITHUB_ENV
+            echo "FUNC_TIMEOUT=$TIMEOUT" >> $GITHUB_ENV
+            echo "FUNC_SERVICE_ACCOUNT=$SERVICE_ACCOUNT" >> $GITHUB_ENV
+            echo "FUNC_ENV_VARS=$ENV_VARS" >> $GITHUB_ENV
+            echo "FUNC_SECRETS_VARS=$SECRETS_VARS" >> $GITHUB_ENV
+            echo "FUNC_LOG_GROUP_ID=$LOG_GROUP_ID" >> $GITHUB_ENV
+            echo "FUNC_LOG_LEVEL=$LOG_LEVEL" >> $GITHUB_ENV
+            echo "FUNC_NETWORK_ID=$NETWORK_ID" >> $GITHUB_ENV
+            echo "FUNC_SUBNET_IDS=$SUBNET_IDS" >> $GITHUB_ENV
+            echo "FUNC_CONCURRENCY=$CONCURRENCY" >> $GITHUB_ENV
+          else
+            echo "No existing versions found, using default parameters"
+            echo "FUNC_RUNTIME=nodejs20" >> $GITHUB_ENV
+            echo "FUNC_ENTRYPOINT=index.handler" >> $GITHUB_ENV
+            echo "FUNC_MEMORY=134217728" >> $GITHUB_ENV
+            echo "FUNC_TIMEOUT=5" >> $GITHUB_ENV
+            echo "FUNC_SERVICE_ACCOUNT=" >> $GITHUB_ENV
+            echo "FUNC_ENV_VARS={}" >> $GITHUB_ENV
+            echo "FUNC_LOG_GROUP_ID=" >> $GITHUB_ENV
+            echo "FUNC_LOG_LEVEL=INFO" >> $GITHUB_ENV
+            echo "FUNC_NETWORK_ID=" >> $GITHUB_ENV
+            echo "FUNC_SUBNET_IDS=" >> $GITHUB_ENV
+            echo "FUNC_CONCURRENCY=" >> $GITHUB_ENV
+          fi
+
+      - name: Deploy Cloud Function
+        env:
+          YC_FUNCTION_ID: ${{ secrets.YC_FUNCTION_ID }}
+        run: |
+          PACKAGE_FILE=$(ls *.tgz | head -n 1)
+          mkdir deploy
+          tar -xzf "$PACKAGE_FILE" -C deploy --strip-components=1
+          
+          # Конвертируем память из байт в удобочитаемый формат
+          if [ "$FUNC_MEMORY" -eq 134217728 ]; then
+            MEMORY_PARAM="128m"
+          elif [ "$FUNC_MEMORY" -eq 268435456 ]; then
+            MEMORY_PARAM="256m"
+          elif [ "$FUNC_MEMORY" -eq 536870912 ]; then
+            MEMORY_PARAM="512m"
+          elif [ "$FUNC_MEMORY" -eq 1073741824 ]; then
+            MEMORY_PARAM="1024m"
+          else
+            MEMORY_MB=$((FUNC_MEMORY / 1048576))
+            MEMORY_PARAM="${MEMORY_MB}m"
+          fi
+          
+          # Строим команду развертывания
+          DEPLOY_CMD="yc serverless function version create"
+          DEPLOY_CMD="$DEPLOY_CMD --function-id $YC_FUNCTION_ID"
+          DEPLOY_CMD="$DEPLOY_CMD --runtime $FUNC_RUNTIME"
+          DEPLOY_CMD="$DEPLOY_CMD --entrypoint $FUNC_ENTRYPOINT"
+          DEPLOY_CMD="$DEPLOY_CMD --memory $MEMORY_PARAM"
+          DEPLOY_CMD="$DEPLOY_CMD --execution-timeout ${FUNC_TIMEOUT}s"
+          DEPLOY_CMD="$DEPLOY_CMD --source-path ./deploy"
+          
+          # Добавляем сервисный аккаунт если есть
+          if [ -n "$FUNC_SERVICE_ACCOUNT" ] && [ "$FUNC_SERVICE_ACCOUNT" != "null" ]; then
+            DEPLOY_CMD="$DEPLOY_CMD --service-account-id $FUNC_SERVICE_ACCOUNT"
+          fi
+          
+          # Добавляем переменные окружения если есть
+          if [ "$FUNC_ENV_VARS" != "{}" ] && [ -n "$FUNC_ENV_VARS" ]; then
+            # Конвертируем JSON в параметры --environment
+            ENV_PARAMS=$(echo "$FUNC_ENV_VARS" | jq -r 'to_entries | map("--environment " + .key + "=" + .value) | join(" ")')
+            if [ -n "$ENV_PARAMS" ]; then
+              DEPLOY_CMD="$DEPLOY_CMD $ENV_PARAMS"
+            fi
+          fi
+          
+          # Добавляем секреты если есть
+          if [ "$FUNC_SECRETS_VARS" != "{}" ] && [ -n "$FUNC_SECRETS_VARS" ]; then
+            # Конвертируем JSON в параметры --secret
+            SECRET_PARAMS=$(echo "$FUNC_SECRETS_VARS" | jq -r 'to_entries | map("--secret " + .key + "=" + .value) | join(" ")')
+            if [ -n "$SECRET_PARAMS" ]; then
+              DEPLOY_CMD="$DEPLOY_CMD $SECRET_PARAMS"
+            fi
+          fi
+
+          # Добавляем настройки логирования если есть
+          if [ -n "$FUNC_LOG_GROUP_ID" ] && [ "$FUNC_LOG_GROUP_ID" != "null" ]; then
+            DEPLOY_CMD="$DEPLOY_CMD --log-group-id $FUNC_LOG_GROUP_ID"
+          fi
+          if [ -n "$FUNC_LOG_LEVEL" ] && [ "$FUNC_LOG_LEVEL" != "null" ]; then
+            DEPLOY_CMD="$DEPLOY_CMD --min-log-level $FUNC_LOG_LEVEL"
+          fi
+          
+          # Добавляем сетевые настройки если есть
+          if [ -n "$FUNC_NETWORK_ID" ] && [ "$FUNC_NETWORK_ID" != "null" ]; then
+            DEPLOY_CMD="$DEPLOY_CMD --network-id $FUNC_NETWORK_ID"
+          fi
+          if [ -n "$FUNC_SUBNET_IDS" ] && [ "$FUNC_SUBNET_IDS" != "null" ]; then
+            DEPLOY_CMD="$DEPLOY_CMD --subnet-id $FUNC_SUBNET_IDS"
+          fi
+          
+          # Добавляем настройки масштабирования если есть
+          if [ -n "$FUNC_CONCURRENCY" ] && [ "$FUNC_CONCURRENCY" != "null" ] && [ "$FUNC_CONCURRENCY" != "0" ]; then
+            DEPLOY_CMD="$DEPLOY_CMD --concurrency $FUNC_CONCURRENCY"
+          fi
+          
+          echo "=== Deploying with command ==="
+          echo "$DEPLOY_CMD"
+          echo "============================="
+          
+          # Выполняем развертывание
+          eval $DEPLOY_CMD
+
+  fale-notify-telegram:
+    runs-on: ubuntu-latest
+    if: failure()
+
+    steps:
+      - name: Send Telegram notification
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: -4927518176
+          WORKFLOW_URL: "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+        run: |
+          MSG="❌ Ошибка в workflow '${{ github.workflow }}' на этапе '${{ github.job }}' (${WORKFLOW_URL})"
+          curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+            -d chat_id="${TELEGRAM_CHAT_ID}" \
+            -d text="$MSG"
+
+  notify-telegram:
+    runs-on: ubuntu-latest
+    if: success()
+
+    steps:
+      - name: Send Telegram notification
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: -4927518176
+          WORKFLOW_URL: "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+        run: |
+          MSG="Workflow '${{ github.workflow }}' завершён! (${WORKFLOW_URL})"
+          curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+            -d chat_id="${TELEGRAM_CHAT_ID}" \
+            -d text="$MSG"

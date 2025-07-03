@@ -1,0 +1,61 @@
+name: Publish to NPM
+
+on:
+  push:
+    tags:
+      - 'v*'  # Публикация при пуше тега вида v1.2.3
+  workflow_dispatch: # Позволяет запускать вручную из интерфейса GitHub
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '20'  # укажи свою версию Node.js
+          registry-url: 'https://registry.npmjs.org/'
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Publish package
+        run: npm publish --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.DIEUGENE_NPM_TOKEN }}
+
+  fale-notify-telegram:
+    runs-on: ubuntu-latest
+    if: failure()
+
+    steps:
+      - name: Send Telegram notification
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: -4927518176
+          WORKFLOW_URL: "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+        run: |
+          MSG="❌ Ошибка в workflow '${{ github.workflow }}' на этапе '${{ github.job }}' (${WORKFLOW_URL})"
+          curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+            -d chat_id="${TELEGRAM_CHAT_ID}" \
+            -d text="$MSG"
+
+  notify-telegram:
+    runs-on: ubuntu-latest
+    if: success()
+
+    steps:
+      - name: Send Telegram notification
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: -4927518176
+          WORKFLOW_URL: "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+        run: |
+          MSG="Workflow '${{ github.workflow }}' завершён! (${WORKFLOW_URL})"
+          curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+            -d chat_id="${TELEGRAM_CHAT_ID}" \
+            -d text="$MSG"
