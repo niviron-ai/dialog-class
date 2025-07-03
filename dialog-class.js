@@ -144,9 +144,7 @@ class Dialog {
     }
 
     log_tagged(tag = '', ...args) {
-        const logEnv = process.env.LOG || '';
-        if (logEnv.includes('DIALOG') &&
-            this.logging_tags.includes(tag)) console.log(...args);
+        if (this.logging_tags.includes(tag)) log(...args);
     }
 
     set_llm({modelName = "gpt-4o", temperature = 0, schema, provider = 'openai'} = {}) {
@@ -942,27 +940,27 @@ ${response.content}`;
     }
 
     static stringify_messages(messages = [], {ai_alias = 'ai', user_alias = 'Респондент', system_alias = 'System', tool_alias = 'tool'} = {}){
-        console.log('[DIALOG_VERBOSE] Static.stringify_messages - input_messages_count:', messages.length, 'input_messages_types:', messages.map(m => m._getType ? m._getType() : 'NO_GET_TYPE'));
-        console.log('[DIALOG_VERBOSE] Static.stringify_messages - input_messages_getType:', messages.map(m => m.getType ? m.getType() : 'NO_GET_TYPE_NO_UNDERSCORE'));
+        log('[DIALOG_VERBOSE] Static.stringify_messages - input_messages_count:', messages.length, 'input_messages_types:', messages.map(m => m._getType ? m._getType() : 'NO_GET_TYPE'));
+        log('[DIALOG_VERBOSE] Static.stringify_messages - input_messages_getType:', messages.map(m => m.getType ? m.getType() : 'NO_GET_TYPE_NO_UNDERSCORE'));
         let d = {'ai': ai_alias, 'human': user_alias, 'system': system_alias, 'tool': tool_alias};
         let result = messages.map(msg => d[msg._getType()] + ': -- ' + no_break(msg['content'])).join('\n');
-        console.log('[DIALOG_VERBOSE] Static.stringify_messages - result_length:', result.length);
+        log('[DIALOG_VERBOSE] Static.stringify_messages - result_length:', result.length);
         return result;
     }
 
     static serialize_messages(messages = []) {
-        console.log('[DIALOG_VERBOSE] Static.serialize_messages - input_messages_count:', messages.length, 'input_messages_types:', messages.map(m => m._getType ? m._getType() : 'NO_GET_TYPE'));
-        console.log('[DIALOG_VERBOSE] Static.serialize_messages - input_messages_getType:', messages.map(m => m.getType ? m.getType() : 'NO_GET_TYPE_NO_UNDERSCORE'));
+        log('[DIALOG_VERBOSE] Static.serialize_messages - input_messages_count:', messages.length, 'input_messages_types:', messages.map(m => m._getType ? m._getType() : 'NO_GET_TYPE'));
+        log('[DIALOG_VERBOSE] Static.serialize_messages - input_messages_getType:', messages.map(m => m.getType ? m.getType() : 'NO_GET_TYPE_NO_UNDERSCORE'));
         let result = mapChatMessagesToStoredMessages(messages);
-        console.log('[DIALOG_VERBOSE] Static.serialize_messages - result_count:', result.length);
+        log('[DIALOG_VERBOSE] Static.serialize_messages - result_count:', result.length);
         return result;
     }
 
     static deserialize_messages(messages = []) {
-        console.log('[DIALOG_VERBOSE] Static.deserialize_messages - input_messages_count:', messages.length);
+        log('[DIALOG_VERBOSE] Static.deserialize_messages - input_messages_count:', messages.length);
         let result = mapStoredMessagesToChatMessages(messages);
-        console.log('[DIALOG_VERBOSE] Static.deserialize_messages - result_count:', result.length, 'result_types:', result.map(m => m._getType ? m._getType() : 'NO_GET_TYPE'));
-        console.log('[DIALOG_VERBOSE] Static.deserialize_messages - result_getType:', result.map(m => m.getType ? m.getType() : 'NO_GET_TYPE_NO_UNDERSCORE'));
+        log('[DIALOG_VERBOSE] Static.deserialize_messages - result_count:', result.length, 'result_types:', result.map(m => m._getType ? m._getType() : 'NO_GET_TYPE'));
+        log('[DIALOG_VERBOSE] Static.deserialize_messages - result_getType:', result.map(m => m.getType ? m.getType() : 'NO_GET_TYPE_NO_UNDERSCORE'));
         return result;
     }
 }
@@ -994,9 +992,9 @@ function get_chain_common({user, service, comment, chain_llm} = {}) {
  * @returns {YdbChatMessageHistory}
  */
 function get_session_history(sessionId) {
-    console.log('[DIALOG_VERBOSE] get_session_history - sessionId:', sessionId);
+    log('[DIALOG_VERBOSE] get_session_history - sessionId:', sessionId);
     let history = new YdbChatMessageHistory({sessionId});
-    console.log('[DIALOG_VERBOSE] get_session_history - created history instance, constructor:', history.constructor.name);
+    log('[DIALOG_VERBOSE] get_session_history - created history instance, constructor:', history.constructor.name);
     return history;
 }
 
@@ -1033,15 +1031,17 @@ function timeout(time = 150) {
 }
 
 function is_instruction(msg, mindTools = true) {
-    console.log('[DIALOG_VERBOSE] is_instruction - checking message type:', msg._getType ? msg._getType() : 'NO_GET_TYPE', 'mindTools:', mindTools);
-    console.log('[DIALOG_VERBOSE] is_instruction - checking message getType:', msg.getType ? msg.getType() : 'NO_GET_TYPE_NO_UNDERSCORE');
     let type = msg._getType();
     let result = type === 'system' || no_break(msg.content).startsWith('Инструкция: ') || (mindTools && type === 'tool');
-    console.log('[DIALOG_VERBOSE] is_instruction - result:', result);
     return result;
 }
 
 function lastOf(arr = []) {return arr[arr.length - 1]}
+
+function log(...args) {
+    const logEnv = process.env.LOG || '';
+    if (logEnv.includes('DIALOG')) console.log(...args);
+}
 
 /**
  * @see https://langchain-ai.github.io/langgraphjs/how-tos/tool-calling-errors/#custom-strategies
@@ -1058,19 +1058,19 @@ function get_custom_tool_node(tools = [], history) {
         const outputMessages = [];
         
         // Добавляем логирование в начале функции
-        console.log('[DIALOG_VERBOSE] get_custom_tool_node START - messages_count:', messages ? messages.length : 0, 'lastMessage_type:', lastMessage ? lastMessage._getType() : 'NO_LAST_MESSAGE', 'tool_calls_count:', lastMessage ? lastMessage.tool_calls.length : 0);
-        console.log('[DIALOG_VERBOSE] get_custom_tool_node START - lastMessage_getType:', lastMessage ? (lastMessage.getType ? lastMessage.getType() : 'NO_GET_TYPE_NO_UNDERSCORE') : 'NO_LAST_MESSAGE');
+        log('[DIALOG_VERBOSE] get_custom_tool_node START - messages_count:', messages ? messages.length : 0, 'lastMessage_type:', lastMessage ? lastMessage._getType() : 'NO_LAST_MESSAGE', 'tool_calls_count:', lastMessage ? lastMessage.tool_calls.length : 0);
+        log('[DIALOG_VERBOSE] get_custom_tool_node START - lastMessage_getType:', lastMessage ? (lastMessage.getType ? lastMessage.getType() : 'NO_GET_TYPE_NO_UNDERSCORE') : 'NO_LAST_MESSAGE');
         
         if (lastMessage.tool_calls.length > 1)
             I.log('CUSTOM TOOL NODE :: GOT', lastMessage.tool_calls.length, 'TOOLS ::', JSON.stringify(lastMessage.tool_calls));
         for (const toolCall of lastMessage.tool_calls) {
             try {
                 I.log('CUSTOM TOOL NODE IS INVOKED :: BEFORE :: ', JSON.stringify(toolCall));
-                console.log('[DIALOG_VERBOSE] get_custom_tool_node - invoking tool:', toolCall.name, 'tool_call_id:', toolCall.id);
+                log('[DIALOG_VERBOSE] get_custom_tool_node - invoking tool:', toolCall.name, 'tool_call_id:', toolCall.id);
                 
                 const toolResult = await toolsByName[toolCall.name].invoke(toolCall);
-                console.log('[DIALOG_VERBOSE] get_custom_tool_node - tool result type:', toolResult ? toolResult._getType() : 'NO_GET_TYPE', 'result_length:', toolResult ? toolResult.content.length : 0);
-                console.log('[DIALOG_VERBOSE] get_custom_tool_node - tool result getType:', toolResult ? (toolResult.getType ? toolResult.getType() : 'NO_GET_TYPE_NO_UNDERSCORE') : 'NO_TOOL_RESULT');
+                log('[DIALOG_VERBOSE] get_custom_tool_node - tool result type:', toolResult ? toolResult._getType() : 'NO_GET_TYPE', 'result_length:', toolResult ? toolResult.content.length : 0);
+                log('[DIALOG_VERBOSE] get_custom_tool_node - tool result getType:', toolResult ? (toolResult.getType ? toolResult.getType() : 'NO_GET_TYPE_NO_UNDERSCORE') : 'NO_TOOL_RESULT');
                 
                 I.log('CUSTOM TOOL NODE IS INVOKED :: AFTER :: ', JSON.stringify(toolResult));
                 outputMessages.push(toolResult);
@@ -1079,7 +1079,7 @@ function get_custom_tool_node(tools = [], history) {
                 I.log('CUSTOM TOOL NODE ERROR :: Tool name ::', toolCall.name, ':: MESSAGE ::', error.message);
                 I.log('CUSTOM TOOL NODE ERROR :: Tool name ::', toolCall.name, ':: STACK ::', error.stack.replaceAll('\n', ' '));
                 
-                console.log('[DIALOG_VERBOSE] get_custom_tool_node - tool error:', toolCall.name, 'error_message:', error.message);
+                log('[DIALOG_VERBOSE] get_custom_tool_node - tool error:', toolCall.name, 'error_message:', error.message);
                 
                 let errorMessage = new ToolMessage({
                     content: error.message,
@@ -1088,20 +1088,20 @@ function get_custom_tool_node(tools = [], history) {
                     additional_kwargs: { error }
                 });
                 
-                console.log('[DIALOG_VERBOSE] get_custom_tool_node - created error ToolMessage, type:', errorMessage._getType());
-                console.log('[DIALOG_VERBOSE] get_custom_tool_node - created error ToolMessage getType:', errorMessage.getType ? errorMessage.getType() : 'NO_GET_TYPE_NO_UNDERSCORE');
+                log('[DIALOG_VERBOSE] get_custom_tool_node - created error ToolMessage, type:', errorMessage._getType());
+                log('[DIALOG_VERBOSE] get_custom_tool_node - created error ToolMessage getType:', errorMessage.getType ? errorMessage.getType() : 'NO_GET_TYPE_NO_UNDERSCORE');
                 outputMessages.push(errorMessage);
             }
         }
         
-        console.log('[DIALOG_VERBOSE] get_custom_tool_node - outputMessages_count:', outputMessages.length, 'outputMessages_types:', outputMessages.map(m => m._getType ? m._getType() : 'NO_GET_TYPE'));
-        console.log('[DIALOG_VERBOSE] get_custom_tool_node - outputMessages_getType:', outputMessages.map(m => m.getType ? m.getType() : 'NO_GET_TYPE_NO_UNDERSCORE'));
+        log('[DIALOG_VERBOSE] get_custom_tool_node - outputMessages_count:', outputMessages.length, 'outputMessages_types:', outputMessages.map(m => m._getType ? m._getType() : 'NO_GET_TYPE'));
+        log('[DIALOG_VERBOSE] get_custom_tool_node - outputMessages_getType:', outputMessages.map(m => m.getType ? m.getType() : 'NO_GET_TYPE_NO_UNDERSCORE'));
         
         // Ради чего весь сыр-бор... Записать результат в историю, чтобы не возникала ошибка
         // https://js.langchain.com/docs/troubleshooting/errors/INVALID_TOOL_RESULTS/
-        console.log('[DIALOG_VERBOSE] get_custom_tool_node - adding messages to history, count:', outputMessages.length);
+        log('[DIALOG_VERBOSE] get_custom_tool_node - adding messages to history, count:', outputMessages.length);
         await history.addMessages(outputMessages);
-        console.log('[DIALOG_VERBOSE] get_custom_tool_node END - returning messages_count:', outputMessages.length);
+        log('[DIALOG_VERBOSE] get_custom_tool_node END - returning messages_count:', outputMessages.length);
         
         return { messages: outputMessages };
     };
