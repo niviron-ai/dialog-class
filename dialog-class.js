@@ -1053,8 +1053,7 @@ function is_instruction(msg, mindTools = true) {
 function lastOf(arr = []) {return arr[arr.length - 1]}
 
 function log(...args) {
-    const logEnv = process.env.LOG || '';
-    if (logEnv.includes('DIALOG')) console.log(...args);
+    I.log_if('DIALOG', ...args)
 }
 
 /**
