@@ -859,6 +859,20 @@ ${response.content}`;
     }
 
     /**
+     * Удаляет блоки метаданных из текста ответа ИИ
+     * Блоки начинаются с [Meta-Data] и заканчиваются [/Meta-Data]
+     * @param {string} text - Исходный текст с возможными блоками метаданных
+     * @returns {string} - Текст без блоков метаданных
+     */
+    remove_metadata_blocks(text) {
+        if (typeof text !== 'string' || I.env_log_has('SHOW_DIALOG_METADATA')) return text;
+
+        // Удаляем все блоки [Meta-Data]...[/Meta-Data] из текста
+        // [\s\S]*? - любые символы включая переносы строк, минимальное совпадение
+        return text.replace(/\[Meta-Data\][\s\S]*?\[\/Meta-Data\]/g, '').trim();
+    }
+
+    /**
      * Статический метод для обращения к LLM (используется для упрощения - без необходимости импорта и инициализации
      * соответствующих LangChain-классов.
      * @param message
