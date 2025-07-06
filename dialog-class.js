@@ -1045,8 +1045,9 @@ function timeout(time = 150) {
 }
 
 function is_instruction(msg, mindTools = true) {
+    if (typeof msg === 'string') return is_instruction_text(msg);
     let type = msg._getType(), text = no_break(msg.content);
-    let result = type === 'system' || text.startsWith('Инструкция: ') || (mindTools && type === 'tool') || is_instruction_text(text);
+    let result = type === 'system' || (mindTools && type === 'tool') || is_instruction_text(text);
     return result;
 }
 
@@ -1057,6 +1058,7 @@ function is_instruction(msg, mindTools = true) {
  */
 function is_instruction_text(text) {
     if (!text || typeof text !== 'string') return false;
+    let nb = no_break(text);
     const instructionPatterns = [
         /^\[Meta-Data\]/i,
         /^Uncertainty Level:/i,
@@ -1073,7 +1075,7 @@ function is_instruction_text(text) {
         /^ПРИМЕРЫ ИСПОЛЬЗОВАНИЯ:/i,
         /^ВАЖНО:/i
     ];
-    return instructionPatterns.some(pattern => pattern.test(text));
+    return nb.startsWith('Инструкция: ') || instructionPatterns.some(pattern => pattern.test(text));
 }
 
 function lastOf(arr = []) {return arr[arr.length - 1]}
