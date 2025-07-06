@@ -802,7 +802,7 @@ ${response.content}`;
         await this.store();
         this.response.message = response;
         if (this.opponent !== null) {
-            await timeout(1000);
+            await I.timeout(1000);
             this.opponent.invoke(response)
         }
 
@@ -1044,15 +1044,16 @@ function break_lines(lines) {
     return lines.split('\n').map(s => break_single_line(s)).join('\n')
 }
 
-function timeout(time = 150) {
-    return new Promise(resolve => setTimeout(resolve, time));
-}
-
 function is_instruction(msg, mindTools = true) {
     if (typeof msg === 'string') return is_instruction_text(msg);
-    let type = msg._getType(), text = no_break(msg.content);
-    let result = type === 'system' || (mindTools && type === 'tool') || is_instruction_text(text);
-    return result;
+    try {
+        let type = msg._getType(), text = no_break(msg.content);
+        return type === 'system' || (mindTools && type === 'tool') || is_instruction_text(text);
+    } catch (e) {
+        I.log_error(e, 'IS_INSTRUCTION');
+        console.log('MSG ', JSON.stringify(msg));
+        return false;
+    }
 }
 
 /**
