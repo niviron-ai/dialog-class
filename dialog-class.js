@@ -937,8 +937,8 @@ ${response.content}`;
      * @param msg
      * @returns {boolean|ZodString|*}
      */
-    static is_instruction(msg) {
-        return msg._getType() === 'system' || no_break(msg.content).startsWith('Инструкция: ')
+    static is_instruction(msg, mindTools = true) {
+        return is_instruction(msg, mindTools)
     }
 
     static async get_data(id, field_name, database) {
@@ -1045,9 +1045,35 @@ function timeout(time = 150) {
 }
 
 function is_instruction(msg, mindTools = true) {
-    let type = msg._getType();
-    let result = type === 'system' || no_break(msg.content).startsWith('Инструкция: ') || (mindTools && type === 'tool');
+    let type = msg._getType(), text = no_break(msg.content);
+    let result = type === 'system' || text.startsWith('Инструкция: ') || (mindTools && type === 'tool') || is_instruction_text(text);
     return result;
+}
+
+/**
+ * Упрощенная функция проверки инструкций
+ * @param {string} text - Текст сообщения
+ * @returns {boolean} True если это инструкция
+ */
+function is_instruction_text(text) {
+    if (!text || typeof text !== 'string') return false;
+    const instructionPatterns = [
+        /^\[Meta-Data\]/i,
+        /^Uncertainty Level:/i,
+        /^What I Know:/i,
+        /^What I Need:/i,
+        /^Phase:/i,
+        /^Action:/i,
+        /^\[\/Meta-Data\]/i,
+        /^ТЫ ВЕДЕШЬ ДВУХФАЗНЫЙ ДИАЛОГ/i,
+        /^ФАЗА \d+:/i,
+        /^ОБЯЗАТЕЛЬНО В КАЖДОМ ОТВЕТЕ:/i,
+        /^УРОВНИ НЕОПРЕДЕЛЕННОСТИ:/i,
+        /^КРИТЕРИИ ДЛЯ UNCERTAINTY LEVEL:/i,
+        /^ПРИМЕРЫ ИСПОЛЬЗОВАНИЯ:/i,
+        /^ВАЖНО:/i
+    ];
+    return instructionPatterns.some(pattern => pattern.test(text));
 }
 
 function lastOf(arr = []) {return arr[arr.length - 1]}
