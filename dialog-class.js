@@ -46,6 +46,7 @@ class Dialog {
     is_tool_activated = false;
     interruption_message = 'Dialog is over';
     last_human_message;
+    store_last_human_message = false;
 
     session_id = "";
     temp_instructions = [];
@@ -57,7 +58,7 @@ class Dialog {
     ignore_starting_message = false;
     storables = [];
     storage = {}; // Поле, где хранятся значения объектов, перечисленных в поле 'storables'
-    restorable = ['is_over', 'is_started', 'dialog_code', 'last_human_message', 'session_summary'];
+    restorable = ['is_over', 'is_started', 'dialog_code', 'session_summary'];
     restorable_exceptions = ['user_wants_to_speak'];
     dialog_code = '';
     tool_data = {name: 'dialog', description: 'Используется для общения с пользователем на определенную тему'};
@@ -118,10 +119,13 @@ class Dialog {
                                                                     - on_restore_end
                                                                     - on_send_response_message_end
                                                                     - on_invoke_end                                     */
-                    database
+                    database,
+                    store_last_human_message = false
                 } = {}) {
         this.log_tagged('log_verbose', '[DIALOG_VERBOSE] Constructor START - session_id:', session_id, 'dialog_code:', dialog_code, 'alias:', alias);
-        
+
+        this.store_last_human_message = store_last_human_message;
+        if (store_last_human_message) this.restorable.push('last_human_message');
         this.database = database;
         this.db = db.init('DIALOG_DATA', {database});
         this.llm = Dialog.get_llm({modelName, provider});
