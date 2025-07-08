@@ -738,8 +738,13 @@ ${response.content}`;
         
         this.log_tagged('log_verbose', '[DIALOG_VERBOSE] Invoke - getting session messages from history');
         this.session_messages = await history.getMessages();
-        this.log_tagged('log_verbose', '[DIALOG_VERBOSE] Invoke - session_messages_count:', this.session_messages.length, 'session_messages_types:', this.session_messages.map(m => m._getType ? m._getType() : 'NO_GET_TYPE'));
-        this.log_tagged('log_verbose', '[DIALOG_VERBOSE] Invoke - session_messages_getType:', this.session_messages.map(m => m.getType ? m.getType() : 'NO_GET_TYPE_NO_UNDERSCORE'));
+        this.log_tagged('log_verbose',
+            '[DIALOG_VERBOSE] Invoke - session_messages_count:',
+            this.session_messages.length, 'session_messages_types:',
+            JSON.stringify(this.session_messages.map(m => m._getType ? m._getType() : 'NO_GET_TYPE')));
+        this.log_tagged('log_verbose',
+            '[DIALOG_VERBOSE] Invoke - session_messages_getType:',
+            JSON.stringify(this.session_messages.map(m => m.getType ? m.getType() : 'NO_GET_TYPE_NO_UNDERSCORE')));
         
         if (this.session_messages.length > 0) {
             function_scenario = 'this.session_messages.length > 0';
@@ -989,7 +994,8 @@ Dialog.get_instruction.as_human_text = function (instruction="") {
 
 let instruction_message_wrap = `
 Инструкция: {0}.
-Данное сообщение не комментируй.
+
+Не нужно комментировать, что ты следуешь инструкции, просто выполни то, что данной инструкцией предусмотрено.
 `;
 
 /**
