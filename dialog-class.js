@@ -528,20 +528,6 @@ ${summary}
                     baseURL: process.env.PROXY_URL
                 }
             });
-            /*chain = get_chain_common({
-                user: this.get_initial_session_id(),
-                service: this.dialog_code,
-                comment: this.alias + ' :: Summarize',
-                chain_llm: new ChatOpenAI({
-                    apiKey: process.env.OPENAI_API_KEY,
-                    modelName: "gpt-4o-mini",
-                    temperature: 0,
-                    configuration: {
-                        basePath: process.env.PROXY_URL,
-                        baseURL: process.env.PROXY_URL
-                    }
-                })
-            });*/
 
         let messages = [
                 ...summarize_structure.messages_to_summarize,
@@ -814,7 +800,7 @@ ${response.content}`;
         await Promise.all(
             this.callbacks
                 .filter(cb => typeof cb.on_invoke_end === 'function')
-                .map(cb => cb.on_invoke_end())
+                .map(cb => cb.on_invoke_end(human_msg, response))
         );
         
         this.log_tagged('log_verbose', '[DIALOG_VERBOSE] Invoke END - response_length:', response.length, 'function_scenario:', function_scenario);
