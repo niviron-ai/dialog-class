@@ -20,6 +20,7 @@ const db = require('@dieugene/key-value-db');
 const { z } = require('zod');
 const billing = require("@dieugene/billing");
 const logger = require("@dieugene/logger")('DIALOG CLASS');
+const { safe_llm_invoke } = require('./llm-invoke-wrapper');
 
 
 let default_start_system_msg = `
@@ -149,6 +150,13 @@ class Dialog {
 
     log_tagged(tag = '', ...args) {
         if (this.logging_tags.includes(tag)) log(...args);
+    }
+
+    /**
+     * Безопасный вызов LLM с retry и диагностикой (импортирован из llm-invoke-wrapper.js)
+     */
+    safe_llm_invoke(invokeFunction, params, options) {
+        return safe_llm_invoke(this, invokeFunction, params, options);
     }
 
     set_llm({modelName = "gpt-4o", temperature = 0, schema, provider = 'openai'} = {}) {
@@ -537,7 +545,16 @@ ${summary}
         this.log_tagged('log_verbose', '[DIALOG_VERBOSE] Summarize_chat - invoking chain with messages_count:', messages.length, 'messages_types:', messages.map(m => m._getType ? m._getType() : 'NO_GET_TYPE'));
         this.log_tagged('log_verbose', '[DIALOG_VERBOSE] Summarize_chat - invoking chain messages_getType:', messages.map(m => m.getType ? m.getType() : 'NO_GET_TYPE_NO_UNDERSCORE'));
         
-        let response = await chain.invoke(messages),
+        // Используем безопасную обертку для суммаризации
+        let response = await this.safe_llm_invoke(
+            (params) => params.chain.invoke(params.messages),
+            { chain, messages },
+            {
+                maxRetries: 2,
+                initialDelay: 500,
+                backoffMultiplier: 2
+            }
+        ),
             summary_add_on = `
 Прими во внимание краткое описание того, о чем мы общались ранее, представленное ниже
 ============
@@ -644,9 +661,21 @@ ${response.content}`;
                 llm.modelName = "gpt-4o";  // .bindTools возвращает не llm, а другой Runnable, поэтому modelName недоступно и нужно явно присвоить.
                 //model = prompt.pipe(llm),
 
-                let model = self.get_chain({self, llm, readOnly}),
-                    response = await model.invoke(state.messages,
-                        {configurable: {sessionId: this.session_id}});
+                let model = self.get_chain({self, llm, readOnly});
+                
+                // Используем безопасную обертку с retry и диагностикой
+                const response = await self.safe_llm_invoke(
+                    (params) => model.invoke(params.messages, params.config),
+                    {
+                        messages: state.messages,
+                        config: {configurable: {sessionId: self.session_id}}
+                    },
+                    {
+                        maxRetries: 3,
+                        initialDelay: 1000,
+                        backoffMultiplier: 2
+                    }
+                );
                         
                 self.log_tagged('log_verbose', '[DIALOG_VERBOSE] Build.callModel - response_type:', response ? response._getType() : 'NO_RESPONSE', 'response_content_length:', response ? response.content.length : 0);
                 self.log_tagged('log_verbose', '[DIALOG_VERBOSE] Build.callModel - response_getType:', response ? (response.getType ? response.getType() : 'NO_GET_TYPE_NO_UNDERSCORE') : 'NO_RESPONSE');
