@@ -1,6 +1,4 @@
 const { YdbChatMessageHistory } = require("@dialogai/ydb-chat-history");
-const { ChatOpenAI } = require('@langchain/openai');
-const { ChatAnthropic } = require("@langchain/anthropic");
 const { RunnableWithMessageHistory, Runnable} = require("@langchain/core/runnables");
 const {
     ToolMessage,
@@ -13,7 +11,6 @@ const {
 } = require("@langchain/core/messages");
 const { ToolNode } = require("@langchain/langgraph/prebuilt");
 const { END, START, StateGraph, messagesStateReducer } = require("@langchain/langgraph");
-const { convertToOpenAITool } = require("@langchain/core/utils/function_calling");
 const { DynamicStructuredTool } = require("@langchain/core/tools");
 const I = require('@dieugene/utils');
 const db = require('@dieugene/key-value-db');
@@ -21,6 +18,7 @@ const { z } = require('zod');
 const billing = require("@dieugene/billing");
 const logger = require("@dieugene/logger")('DIALOG CLASS');
 const { safe_llm_invoke } = require('./llm-invoke-wrapper');
+const { LLMProviderFactory } = require('./llm-provider-factory');
 
 
 let default_start_system_msg = `
@@ -34,6 +32,7 @@ let default_start_system_msg = `
 class Dialog {
     db;
     llm;
+    llm_provider; // Провайдер LLM для определения необходимости конвертации инструментов
     ctx; // В случае использования с telegraf.js, доступ к объекту вызова
     tools = [];
     observers = [];
@@ -59,7 +58,7 @@ class Dialog {
     ignore_starting_message = false;
     storables = [];
     storage = {}; // Поле, где хранятся значения объектов, перечисленных в поле 'storables'
-    restorable = ['is_over', 'is_started', 'dialog_code', 'session_summary'];
+    restorable = ['is_over', 'is_started', 'dialog_code', 'session_summary', 'llm_provider'];
     restorable_exceptions = ['user_wants_to_speak'];
     dialog_code = '';
     tool_data = {name: 'dialog', description: 'Используется для общения с пользователем на определенную тему'};
@@ -111,8 +110,8 @@ class Dialog {
                         limit: 5                                /*  Количество сообщений, сохраняемых в истории до
                                                                     суммаризации                                        */
                     },
-                    modelName = "gpt-4o",                       /*  Тип модели */
-                    provider = 'openai',                        /*  Поставщик модели */
+                    modelName,                                  /*  Тип модели (если не указан, берется из DEFAULT_LLM_MODEL или дефолт для провайдера) */
+                    provider,                                   /*  Поставщик модели (если не указан, берется из DEFAULT_LLM_PROVIDER или 'openai') */
                     storables = [],                             /*  Названия пользовательских полей, хранимых в данном
                                                                     диалоге.                                            */
                     callbacks = [],                             /*  Массив callback-объектов, организованных по аналогии
@@ -129,7 +128,12 @@ class Dialog {
         if (store_last_human_message) this.restorable.push('last_human_message');
         this.database = database;
         this.db = db.init('DIALOG_DATA', {database});
-        this.llm = Dialog.get_llm({modelName, provider});
+        
+        // Определяем провайдер: из параметра, переменной окружения или дефолт
+        const resolvedProvider = (provider || process.env.DEFAULT_LLM_PROVIDER || 'openai').toLowerCase();
+        this.llm_provider = resolvedProvider;
+        
+        this.llm = Dialog.get_llm({modelName, provider: resolvedProvider});
         this.session_id = [dialog_code, session_id].filter(s => !!s).join('::');
         this.dialog_code = dialog_code;
         this.opponent = opponent;
@@ -159,8 +163,11 @@ class Dialog {
         return safe_llm_invoke(this, invokeFunction, params, options);
     }
 
-    set_llm({modelName = "gpt-4o", temperature = 0, schema, provider = 'openai'} = {}) {
-        this.llm = Dialog.get_llm({modelName, temperature, schema, provider});
+    set_llm({modelName, temperature = 0, schema, provider} = {}) {
+        // Определяем провайдер: из параметра, переменной окружения или текущий
+        const resolvedProvider = (provider || process.env.DEFAULT_LLM_PROVIDER || this.llm_provider || 'openai').toLowerCase();
+        this.llm_provider = resolvedProvider;
+        this.llm = Dialog.get_llm({modelName, temperature, schema, provider: resolvedProvider});
         return this;
     }
 
@@ -527,14 +534,12 @@ ${summary}
 
 Расширь это резюме исходя из сообщений, представленных выше`
             : 'Сформируй резюме нашего диалога',
-            chain = new ChatOpenAI({
-                apiKey: process.env.OPENAI_API_KEY,
-                modelName: "gpt-4o-mini",
-                temperature: 0,
-                configuration: {
-                    basePath: process.env.PROXY_URL,
-                    baseURL: process.env.PROXY_URL
-                }
+            // Используем тот же провайдер, но модель для суммаризации (более дешевую)
+            summaryModel = LLMProviderFactory.getSummaryModel(this.llm_provider),
+            chain = Dialog.get_llm({
+                modelName: summaryModel,
+                provider: this.llm_provider,
+                temperature: 0
             });
 
         let messages = [
@@ -643,8 +648,10 @@ ${response.content}`;
                 self.log_tagged('log_verbose', '[DIALOG_VERBOSE] Build.wayToContinue - lastMessage_type:', lastMessage ? lastMessage._getType() : 'NO_MESSAGE');
                 self.log_tagged('log_verbose', '[DIALOG_VERBOSE] Build.wayToContinue - lastMessage_getType:', lastMessage ? (lastMessage.getType ? lastMessage.getType() : 'NO_GET_TYPE_NO_UNDERSCORE') : 'NO_MESSAGE');
                 
-                let toolCalls = lastMessage.additional_kwargs.tool_calls;
-                if (toolCalls) {
+                // Унифицированная проверка tool_calls: используем стандартный формат LangChain
+                // Проверяем оба варианта для обратной совместимости
+                let toolCalls = lastMessage?.tool_calls || lastMessage?.additional_kwargs?.tool_calls;
+                if (toolCalls && toolCalls.length > 0) {
                     self.is_tool_activated = true;
                     self.log_tagged('log_verbose', '[DIALOG_VERBOSE] Build.wayToContinue - tool_calls detected, count:', toolCalls.length);
                     return 'tool_node';
@@ -657,8 +664,9 @@ ${response.content}`;
                 self.log_tagged('log_verbose', '[DIALOG_VERBOSE] Build.callModel START - state_messages_count:', state.messages ? state.messages.length : 0, 'state_messages_types:', state.messages ? state.messages.map(m => m._getType ? m._getType() : 'NO_GET_TYPE') : []);
                 self.log_tagged('log_verbose', '[DIALOG_VERBOSE] Build.callModel - state_messages_getType:', state.messages ? state.messages.map(m => m.getType ? m.getType() : 'NO_GET_TYPE_NO_UNDERSCORE') : []);
                 
-                let llm = self.llm.bindTools(self.tools.map(tool => convertToOpenAITool(tool)));
-                llm.modelName = "gpt-4o";  // .bindTools возвращает не llm, а другой Runnable, поэтому modelName недоступно и нужно явно присвоить.
+                // Подготавливаем инструменты для привязки с учетом провайдера
+                const toolsToBind = LLMProviderFactory.prepareToolsForBinding(self.tools, self.llm_provider);
+                let llm = self.llm.bindTools(toolsToBind);
                 //model = prompt.pipe(llm),
 
                 let model = self.get_chain({self, llm, readOnly});
@@ -905,29 +913,24 @@ ${response.content}`;
      * @param systemPrompt
      * @returns {Promise<MessageContent>}
      */
-    static async call_llm(message, {modelName = "gpt-4o", temperature = 0, systemPrompt = 'Ты - полезный помощник.', schema, provider = 'openai'} = {}) {
+    static async call_llm(message, {modelName, temperature = 0, systemPrompt = 'Ты - полезный помощник.', schema, provider} = {}) {
         I.log('DIALOG CLASS :: CALLING LLM :: ', message);
-        let llm = this.get_llm({modelName, temperature, provider, schema}),
+        // Определяем провайдер: из параметра, переменной окружения или дефолт
+        const resolvedProvider = (provider || process.env.DEFAULT_LLM_PROVIDER || 'openai').toLowerCase();
+        let llm = this.get_llm({modelName, temperature, provider: resolvedProvider, schema}),
         response = await llm.invoke(
             [new SystemMessage(systemPrompt), new HumanMessage(message)]
         );
         return !!schema ? response : response.content;
     }
 
-    static get_llm({modelName = "gpt-4o", temperature = 0, schema, provider = 'openai'} = {}) {
-        let llm = provider ===  'openai' ? new ChatOpenAI({
-            apiKey: process.env.OPENAI_API_KEY,
-            modelName,
-            temperature,
-            configuration: {
-                basePath: process.env.PROXY_URL,
-                baseURL: process.env.PROXY_URL
-            }
-        }) : new ChatAnthropic({
-            // apiKey: process.env.OPENAI_API_KEY,
-            modelName: modelName,
-            temperature: 0
-        });
+    static get_llm({modelName, temperature = 0, schema, provider} = {}) {
+        // Определяем провайдер: из параметра, переменной окружения или дефолт
+        const resolvedProvider = (provider || process.env.DEFAULT_LLM_PROVIDER || 'openai').toLowerCase();
+        
+        // Используем фабрику для создания LLM
+        const llm = LLMProviderFactory.create({modelName, temperature, provider: resolvedProvider});
+        
         return !!schema ? llm.withStructuredOutput(schema) : llm;
     }
 
@@ -1174,4 +1177,4 @@ function get_custom_tool_node(tools = [], history) {
     };
 }
 
-module.exports = {Dialog};
+module.exports = { Dialog, LLMProviderFactory };

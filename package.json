@@ -31,6 +31,7 @@
   },
   "files": [
     "dialog-class.js",
+    "llm-provider-factory.js",
     "llm-invoke-wrapper.js",
     "README.md",
     "package.json"

@@ -4,7 +4,7 @@
 
 ## Возможности
 
-- 🤖 **Поддержка множественных провайдеров**: OpenAI GPT и Anthropic Claude
+- 🤖 **Выбор LLM-провайдера**: OpenAI GPT, Anthropic Claude и YandexGPT с динамическим переключением без правок кода
 - 🛠️ **Система инструментов**: Интеграция с LangChain tools для расширения функциональности
 - 💾 **Персистентность**: Автоматическое сохранение и восстановление состояния диалога
 - 📝 **Управление историей**: Умная система суммаризации длинных диалогов
@@ -40,8 +40,8 @@ const dialog = new Dialog({
     alias: 'Помощник',
     dialog_code: 'support',
     start_system_msg: 'Ты - дружелюбный помощник службы поддержки',
-    modelName: 'gpt-4o',
-    provider: 'openai',
+    modelName: 'gpt-5',     // можно не указывать, если задано через ENV
+    provider: 'openai',     // openai | anthropic | yandex
     database: 'your_database_connection_string', // Опционально, если не указано - используется YDB_ADDRESS
     summary_config: {
         threshold: 15,
@@ -62,8 +62,8 @@ const dialog = new Dialog({
 | `tool_name` | string | - | Имя инструмента для AI-агентов |
 | `tool_description` | string | - | Описание инструмента |
 | `summary_config` | object | `{threshold: 10, limit: 5}` | Настройки суммаризации |
-| `modelName` | string | 'gpt-4o' | Модель языка |
-| `provider` | string | 'openai' | Провайдер ('openai' или 'anthropic') |
+| `modelName` | string | завиcит от провайдера | Модель языка (можно задать через ENV) |
+| `provider` | string | `'openai'` (через ENV) | Провайдер (`'openai'`, `'anthropic'`, `'yandex'`) |
 | `storables` | array | [] | Поля для сохранения в базе данных |
 | `callbacks` | array | [] | Массив callback-функций |
 | `database` | string | - | Строка подключения к базе данных для хранения истории и данных диалога |
@@ -181,7 +181,7 @@ dialog.reg_observer(observer, 'Логгер сообщений');
 const response = await Dialog.call_llm(
     "Объясни квантовую физику",
     {
-        modelName: "gpt-4o",
+        modelName: "gpt-5",
         temperature: 0.7,
         systemPrompt: "Ты - учитель физики"
     }
@@ -189,7 +189,7 @@ const response = await Dialog.call_llm(
 
 // Получение экземпляра LLM
 const llm = Dialog.get_llm({
-    modelName: "claude-3-sonnet-20240229",
+    modelName: "claude-sonnet-4-5",
     provider: "anthropic"
 });
 
@@ -213,13 +213,62 @@ Dialog.add_instruction(messages, "Отвечай кратко");
 }
 ```
 
-## Переменные окружения
+## Конфигурация LLM-провайдеров
+
+Механизм выбора моделей вынесен в фабрику `LLMProviderFactory`. Значения можно задавать как параметрами конструктора `Dialog`, так и через переменные окружения.
+
+### Базовые переменные
 
 ```bash
-OPENAI_API_KEY=your_openai_api_key
-ANTHROPIC_API_KEY=your_anthropic_api_key
-PROXY_URL=https://your-proxy-url.com  # Опционально
-YDB_ADDRESS=your_ydb_database_url     # Используется по умолчанию, если параметр database не указан
+# Провайдер по умолчанию (openai | anthropic | yandex)
+DEFAULT_LLM_PROVIDER=openai
+
+# Основная модель (если не задано, выбирается дефолт для провайдера)
+DEFAULT_LLM_MODEL=gpt-5
+
+# Модель для суммаризации (если не задано, выбирается более дешёвая модель провайдера)
+DEFAULT_SUMMARY_MODEL=gpt-5-mini
+```
+
+### Провайдер-специфичные переменные
+
+```bash
+# OpenAI
+OPENAI_API_KEY=...
+DEFAULT_LLM_MODEL_OPENAI=gpt-5
+DEFAULT_SUMMARY_MODEL_OPENAI=gpt-5-mini
+
+# Anthropic
+ANTHROPIC_API_KEY=...
+ANTHROPIC_BASE_URL=https://your-proxy-url.com  # Опционально, fallback = PROXY_URL
+DEFAULT_LLM_MODEL_ANTHROPIC=claude-sonnet-4-5
+DEFAULT_SUMMARY_MODEL_ANTHROPIC=claude-haiku-4-5
+
+# YandexGPT (OpenAI-совместимый API)
+YC_API_KEY=...
+YC_FOLDER_ID=...
+YC_MODEL=gpt-oss-120b           # будет обёрнут в gpt://{folder}/{model}/latest
+YC_BASE_URL=https://llm.api.cloud.yandex.net/v1
+DEFAULT_LLM_MODEL_YANDEX=gpt-oss-120b
+DEFAULT_SUMMARY_MODEL_YANDEX=gpt-oss-20b
+
+# Общие параметры инфраструктуры
+PROXY_URL=https://your-proxy-url.com   # Используется как fallback
+YDB_ADDRESS=your_ydb_database_url      # Используется по умолчанию, если database не указан
+```
+
+### Использование фабрики напрямую
+
+```javascript
+const { LLMProviderFactory } = require('@dialogai/dialog-class');
+
+const anthropicLlm = LLMProviderFactory.create({
+  provider: 'anthropic',
+  modelName: 'claude-sonnet-4-5',
+  temperature: 0.2,
+});
+
+const toolsReadyForOpenAI = LLMProviderFactory.prepareToolsForBinding(tools, 'openai');
 ```
 
 ## Методы жизненного цикла
