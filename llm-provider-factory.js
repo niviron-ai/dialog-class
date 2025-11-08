@@ -48,16 +48,28 @@ class LLMProviderFactory {
             this.DEFAULT_MODELS.openai;
 
         switch (normalizedProvider) {
-            case 'openai':
-                return new ChatOpenAI({
+            case 'openai': {
+                const openAIOptions = {
                     apiKey: process.env.OPENAI_API_KEY,
                     modelName: actualModelName,
-                    temperature,
                     configuration: {
                         basePath: process.env.PROXY_URL,
                         baseURL: process.env.PROXY_URL
                     }
-                });
+                };
+
+                if (actualModelName === 'gpt-5-mini') {
+                    if (typeof temperature !== 'undefined') {
+                        console.info('[LLM_PROVIDER_FACTORY][OPENAI] Ignoring temperature for gpt-5-mini (not supported)', {
+                            requestedTemperature: temperature
+                        });
+                    }
+                } else {
+                    openAIOptions.temperature = temperature;
+                }
+
+                return new ChatOpenAI(openAIOptions);
+            }
 
             case 'anthropic':
                 {
@@ -73,8 +85,7 @@ class LLMProviderFactory {
             case 'yandex':
                 // YandexGPT использует ChatOpenAI с OpenAI-совместимым API
                 const ycFolderId = process.env.YC_FOLDER_ID;
-                // Используем YC_MODEL из переменных окружения, если задан, иначе переданную модель или дефолтную
-                const ycModel = process.env.YC_MODEL || actualModelName;
+                const ycModel = actualModelName;
                 
                 if (!ycFolderId) {
                     throw new Error('YC_FOLDER_ID environment variable is required for YandexGPT provider');
@@ -88,16 +99,15 @@ class LLMProviderFactory {
 
                 const yandexBaseUrl = process.env.YC_BASE_URL || process.env.YC_API_BASE_URL || 'https://llm.api.cloud.yandex.net/v1';
 
-                console.info('[LLM_PROVIDER_FACTORY][YANDEX] Creating ChatOpenAI instance', {
+                console.info('[LLM_PROVIDER_FACTORY][YANDEX] Creating ChatOpenAI instance', JSON.stringify({
                     requestedModel: modelName,
                     resolvedModel: ycModel,
                     modelUri: yandexModelString,
                     folderId: ycFolderId,
                     baseURL: yandexBaseUrl,
                     temperature,
-                    hasApiKey: Boolean(process.env.YC_API_KEY),
-                    modelFromEnv: Boolean(process.env.YC_MODEL)
-                });
+                    hasApiKey: Boolean(process.env.YC_API_KEY)
+                }));
 
                 return new ChatOpenAI({
                     apiKey: process.env.YC_API_KEY,

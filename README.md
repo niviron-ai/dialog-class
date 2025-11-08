@@ -237,6 +237,7 @@ DEFAULT_SUMMARY_MODEL=gpt-5-mini
 OPENAI_API_KEY=...
 DEFAULT_LLM_MODEL_OPENAI=gpt-5
 DEFAULT_SUMMARY_MODEL_OPENAI=gpt-5-mini
+# Примечание: модель `gpt-5-mini` использует фиксированную температуру на стороне OpenAI; переданное значение будет проигнорировано.
 
 # Anthropic
 ANTHROPIC_API_KEY=...
@@ -247,7 +248,6 @@ DEFAULT_SUMMARY_MODEL_ANTHROPIC=claude-haiku-4-5
 # YandexGPT (OpenAI-совместимый API)
 YC_API_KEY=...
 YC_FOLDER_ID=...
-YC_MODEL=gpt-oss-120b           # будет обёрнут в gpt://{folder}/{model}/latest
 YC_BASE_URL=https://llm.api.cloud.yandex.net/v1
 DEFAULT_LLM_MODEL_YANDEX=gpt-oss-120b
 DEFAULT_SUMMARY_MODEL_YANDEX=gpt-oss-20b
