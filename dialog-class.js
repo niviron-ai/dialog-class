@@ -58,7 +58,7 @@ class Dialog {
     ignore_starting_message = false;
     storables = [];
     storage = {}; // Поле, где хранятся значения объектов, перечисленных в поле 'storables'
-    restorable = ['is_over', 'is_started', 'dialog_code', 'session_summary', 'llm_provider'];
+    restorable = ['is_over', 'is_started', 'dialog_code', 'session_summary'];
     restorable_exceptions = ['user_wants_to_speak'];
     dialog_code = '';
     tool_data = {name: 'dialog', description: 'Используется для общения с пользователем на определенную тему'};

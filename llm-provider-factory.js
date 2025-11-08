@@ -94,8 +94,10 @@ class LLMProviderFactory {
                     throw new Error('YC_API_KEY environment variable is required for YandexGPT provider');
                 }
 
-                // Формируем строку модели в формате gpt://{folder}/{model}/latest
-                const yandexModelString = `gpt://${ycFolderId}/${ycModel}/latest`;
+                // Формируем строку модели
+                const yandexModelString = ycModel.startsWith('gpt://')
+                    ? ycModel
+                    : `gpt://${ycFolderId}/${ycModel}/latest`;
 
                 const yandexBaseUrl = process.env.YC_BASE_URL || process.env.YC_API_BASE_URL || 'https://llm.api.cloud.yandex.net/v1';
 
@@ -155,10 +157,20 @@ class LLMProviderFactory {
         const normalizedProvider = String(provider || '').toLowerCase();
         const providerEnvKey = `DEFAULT_SUMMARY_MODEL_${normalizedProvider.toUpperCase()}`;
         const providerSpecificSummary = process.env[providerEnvKey];
-        return process.env.DEFAULT_SUMMARY_MODEL ||
-            providerSpecificSummary ||
-            this.DEFAULT_SUMMARY_MODELS[normalizedProvider] ||
-            this.DEFAULT_SUMMARY_MODELS.openai;
+
+        if (process.env.DEFAULT_SUMMARY_MODEL) {
+            return process.env.DEFAULT_SUMMARY_MODEL;
+        }
+
+        if (providerSpecificSummary) {
+            return providerSpecificSummary;
+        }
+
+        if (this.DEFAULT_SUMMARY_MODELS[normalizedProvider]) {
+            return this.DEFAULT_SUMMARY_MODELS[normalizedProvider];
+        }
+
+        return this.DEFAULT_SUMMARY_MODELS.openai;
     }
 
     /**
