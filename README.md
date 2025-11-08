@@ -240,7 +240,7 @@ DEFAULT_SUMMARY_MODEL_OPENAI=gpt-5-mini
 
 # Anthropic
 ANTHROPIC_API_KEY=...
-ANTHROPIC_BASE_URL=https://your-proxy-url.com  # Опционально, fallback = PROXY_URL
+ANTHROPIC_BASE_URL=https://your-proxy-url.com  # Опционально (fallback = PROXY_URL)
 DEFAULT_LLM_MODEL_ANTHROPIC=claude-sonnet-4-5
 DEFAULT_SUMMARY_MODEL_ANTHROPIC=claude-haiku-4-5
 
@@ -253,7 +253,7 @@ DEFAULT_LLM_MODEL_YANDEX=gpt-oss-120b
 DEFAULT_SUMMARY_MODEL_YANDEX=gpt-oss-20b
 
 # Общие параметры инфраструктуры
-PROXY_URL=https://your-proxy-url.com   # Используется как fallback
+PROXY_URL=https://your-proxy-url.com   # Общий прокси для внешних API (используется для OpenAI и fallback для Anthropic)
 YDB_ADDRESS=your_ydb_database_url      # Используется по умолчанию, если database не указан
 ```
 

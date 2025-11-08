@@ -86,7 +86,18 @@ class LLMProviderFactory {
                 // Формируем строку модели в формате gpt://{folder}/{model}/latest
                 const yandexModelString = `gpt://${ycFolderId}/${ycModel}/latest`;
 
-                const yandexBaseUrl = process.env.YC_BASE_URL || process.env.YC_API_BASE_URL || process.env.PROXY_URL || 'https://llm.api.cloud.yandex.net/v1';
+                const yandexBaseUrl = process.env.YC_BASE_URL || process.env.YC_API_BASE_URL || 'https://llm.api.cloud.yandex.net/v1';
+
+                console.info('[LLM_PROVIDER_FACTORY][YANDEX] Creating ChatOpenAI instance', {
+                    requestedModel: modelName,
+                    resolvedModel: ycModel,
+                    modelUri: yandexModelString,
+                    folderId: ycFolderId,
+                    baseURL: yandexBaseUrl,
+                    temperature,
+                    hasApiKey: Boolean(process.env.YC_API_KEY),
+                    modelFromEnv: Boolean(process.env.YC_MODEL)
+                });
 
                 return new ChatOpenAI({
                     apiKey: process.env.YC_API_KEY,
