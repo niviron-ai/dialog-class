@@ -72,6 +72,11 @@ class LLMProviderFactory {
 
         switch (normalizedProvider) {
             case 'openai': {
+                const openAIModelsWithoutTemperature = new Set([
+                    'gpt-5',
+                    'gpt-5-mini'
+                ]);
+
                 const openAIOptions = {
                     apiKey: process.env.OPENAI_API_KEY,
                     modelName: actualModelName,
@@ -81,9 +86,10 @@ class LLMProviderFactory {
                     }
                 };
 
-                if (actualModelName === 'gpt-5-mini') {
+                if (openAIModelsWithoutTemperature.has(actualModelName)) {
                     if (typeof temperature !== 'undefined') {
-                        console.info('[LLM_PROVIDER_FACTORY][OPENAI] Ignoring temperature for gpt-5-mini (not supported)', JSON.stringify({
+                        console.info('[LLM_PROVIDER_FACTORY][OPENAI] Ignoring temperature for model without temperature support', JSON.stringify({
+                            model: actualModelName,
                             requestedTemperature: temperature
                         }));
                     }
