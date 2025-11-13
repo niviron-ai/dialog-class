@@ -26,6 +26,38 @@ async function safe_llm_invoke(context, invokeFunction, params, options = {}) {
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
         const attemptStartTime = Date.now();
         
+        let llmLoggingPayload = {};
+        try {
+            const chain = params?.chain ?? null;
+            const candidateLLM =
+                chain?.llm ??
+                chain?.bound?.llm ??
+                params?.llm ??
+                null;
+            llmLoggingPayload = {
+                chainType: chain?.constructor?.name ?? null,
+                llmType: candidateLLM?.constructor?.name ?? null,
+                llmModel:
+                    candidateLLM?.modelName ??
+                    candidateLLM?.model ??
+                    candidateLLM?.lc_kwargs?.model ??
+                    candidateLLM?.lc_kwargs?.modelName ??
+                    null
+            };
+        } catch (introspectionError) {
+            llmLoggingPayload = { llmIntrospectionError: introspectionError.message };
+        }
+
+        console.info('[SAFE_LLM_INVOKE] Attempt start', JSON.stringify({
+            attempt,
+            maxRetries,
+            sessionId: context?.session_id ?? null,
+            dialogCode: context?.dialog_code ?? null,
+            alias: context?.alias ?? null,
+            messagesCount: params?.messages?.length || 0,
+            ...llmLoggingPayload
+        }));
+
         try {
             const response = await invokeFunction(params);
             const duration = Date.now() - attemptStartTime;

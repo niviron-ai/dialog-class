@@ -34,6 +34,10 @@ class LLMProviderFactory {
      * @returns {ChatOpenAI|ChatAnthropic} Экземпляр LLM
      */
     static create({modelName, temperature = 0, provider} = {}) {
+        const rawConfig = arguments.length > 0 ? (arguments[0] ?? {}) : {};
+        const temperatureWasProvided = Object.prototype.hasOwnProperty.call(rawConfig, 'temperature');
+        const modelNameWasProvided = Object.prototype.hasOwnProperty.call(rawConfig, 'modelName');
+        const providerWasProvided = Object.prototype.hasOwnProperty.call(rawConfig, 'provider');
         // Определяем провайдер из параметра, переменной окружения или дефолтного значения
         const requestedProvider = provider ?? process.env.DEFAULT_LLM_PROVIDER ?? 'openai';
         const normalizedProvider = String(requestedProvider).toLowerCase();
@@ -46,6 +50,25 @@ class LLMProviderFactory {
             process.env.DEFAULT_LLM_MODEL ||
             this.DEFAULT_MODELS[normalizedProvider] ||
             this.DEFAULT_MODELS.openai;
+
+        const modelResolutionTrace = {
+            directParam: modelName ?? null,
+            providerEnv: providerSpecificModel ?? null,
+            globalEnv: process.env.DEFAULT_LLM_MODEL ?? null,
+            providerDefault: this.DEFAULT_MODELS[normalizedProvider] ?? null,
+            openaiDefault: this.DEFAULT_MODELS.openai
+        };
+
+        console.info('[LLM_PROVIDER_FACTORY] Resolved base configuration', JSON.stringify({
+            requestedProvider,
+            normalizedProvider,
+            providerWasProvided,
+            modelNameWasProvided,
+            temperatureWasProvided,
+            resolvedModel: actualModelName,
+            temperature,
+            modelResolutionTrace
+        }));
 
         switch (normalizedProvider) {
             case 'openai': {
@@ -60,13 +83,28 @@ class LLMProviderFactory {
 
                 if (actualModelName === 'gpt-5-mini') {
                     if (typeof temperature !== 'undefined') {
-                        console.info('[LLM_PROVIDER_FACTORY][OPENAI] Ignoring temperature for gpt-5-mini (not supported)', {
+                        console.info('[LLM_PROVIDER_FACTORY][OPENAI] Ignoring temperature for gpt-5-mini (not supported)', JSON.stringify({
                             requestedTemperature: temperature
-                        });
+                        }));
                     }
                 } else {
                     openAIOptions.temperature = temperature;
                 }
+
+                const loggableOpenAIOptions = {
+                    model: openAIOptions.modelName ?? openAIOptions.model ?? null,
+                    temperature: Object.prototype.hasOwnProperty.call(openAIOptions, 'temperature') ? openAIOptions.temperature : 'not-set',
+                    basePath: openAIOptions.configuration?.basePath ?? null,
+                    baseURL: openAIOptions.configuration?.baseURL ?? null,
+                    hasApiKey: Boolean(openAIOptions.apiKey)
+                };
+                console.info('[LLM_PROVIDER_FACTORY][OPENAI] Final options snapshot', JSON.stringify({
+                    resolvedModel: loggableOpenAIOptions.model,
+                    temperature: loggableOpenAIOptions.temperature,
+                    basePath: loggableOpenAIOptions.basePath,
+                    baseURL: loggableOpenAIOptions.baseURL,
+                    hasApiKey: loggableOpenAIOptions.hasApiKey
+                }));
 
                 return new ChatOpenAI(openAIOptions);
             }
@@ -74,12 +112,21 @@ class LLMProviderFactory {
             case 'anthropic':
                 {
                 const anthropicBaseUrl = process.env.ANTHROPIC_BASE_URL || process.env.PROXY_URL;
-                return new ChatAnthropic({
+                const anthropicOptions = {
                     apiKey: process.env.ANTHROPIC_API_KEY,
                     modelName: actualModelName,
                     temperature,
                     ...(anthropicBaseUrl ? { baseUrl: anthropicBaseUrl } : {})
-                });
+                };
+
+                console.info('[LLM_PROVIDER_FACTORY][ANTHROPIC] Final options snapshot', JSON.stringify({
+                    resolvedModel: anthropicOptions.modelName,
+                    temperature: anthropicOptions.temperature,
+                    baseUrl: anthropicBaseUrl ?? null,
+                    hasApiKey: Boolean(anthropicOptions.apiKey)
+                }));
+
+                return new ChatAnthropic(anthropicOptions);
                 }
 
             case 'yandex':
@@ -158,19 +205,33 @@ class LLMProviderFactory {
         const providerEnvKey = `DEFAULT_SUMMARY_MODEL_${normalizedProvider.toUpperCase()}`;
         const providerSpecificSummary = process.env[providerEnvKey];
 
+        const summaryResolutionTrace = {
+            globalSummaryEnv: process.env.DEFAULT_SUMMARY_MODEL ?? null,
+            providerSummaryEnv: providerSpecificSummary ?? null,
+            providerDefault: this.DEFAULT_SUMMARY_MODELS[normalizedProvider] ?? null,
+            openaiDefault: this.DEFAULT_SUMMARY_MODELS.openai
+        };
+
+        let resolvedSummaryModel;
+
         if (process.env.DEFAULT_SUMMARY_MODEL) {
-            return process.env.DEFAULT_SUMMARY_MODEL;
+            resolvedSummaryModel = process.env.DEFAULT_SUMMARY_MODEL;
+        } else if (providerSpecificSummary) {
+            resolvedSummaryModel = providerSpecificSummary;
+        } else if (this.DEFAULT_SUMMARY_MODELS[normalizedProvider]) {
+            resolvedSummaryModel = this.DEFAULT_SUMMARY_MODELS[normalizedProvider];
+        } else {
+            resolvedSummaryModel = this.DEFAULT_SUMMARY_MODELS.openai;
         }
 
-        if (providerSpecificSummary) {
-            return providerSpecificSummary;
-        }
+        console.info('[LLM_PROVIDER_FACTORY] Resolved summary model', JSON.stringify({
+            requestedProvider: provider ?? null,
+            normalizedProvider,
+            resolvedSummaryModel,
+            summaryResolutionTrace
+        }));
 
-        if (this.DEFAULT_SUMMARY_MODELS[normalizedProvider]) {
-            return this.DEFAULT_SUMMARY_MODELS[normalizedProvider];
-        }
-
-        return this.DEFAULT_SUMMARY_MODELS.openai;
+        return resolvedSummaryModel;
     }
 
     /**

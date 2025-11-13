@@ -131,6 +131,13 @@ class Dialog {
         
         // Определяем провайдер: из параметра, переменной окружения или дефолт
         const resolvedProvider = (provider || process.env.DEFAULT_LLM_PROVIDER || 'openai').toLowerCase();
+        console.info('[DIALOG] Constructor provider resolution', JSON.stringify({
+            dialogCode: dialog_code || null,
+            sessionId: session_id || null,
+            requestedProvider: provider ?? null,
+            resolvedProvider,
+            requestedModel: modelName ?? null
+        }));
         this.llm_provider = resolvedProvider;
         
         this.llm = Dialog.get_llm({modelName, provider: resolvedProvider});
@@ -166,8 +173,31 @@ class Dialog {
     set_llm({modelName, temperature = 0, schema, provider} = {}) {
         // Определяем провайдер: из параметра, переменной окружения или текущий
         const resolvedProvider = (provider || process.env.DEFAULT_LLM_PROVIDER || this.llm_provider || 'openai').toLowerCase();
+        console.info('[DIALOG] set_llm invoked', JSON.stringify({
+            dialogCode: this.dialog_code || null,
+            sessionId: this.session_id || null,
+            requestedProvider: provider ?? null,
+            resolvedProvider,
+            requestedModel: modelName ?? null,
+            temperature
+        }));
         this.llm_provider = resolvedProvider;
         this.llm = Dialog.get_llm({modelName, temperature, schema, provider: resolvedProvider});
+        if (this.llm) {
+            const resolvedModelName =
+                this.llm.modelName ??
+                this.llm.model ??
+                this.llm?.lc_kwargs?.model ??
+                this.llm?.lc_kwargs?.modelName ??
+                null;
+            console.info('[DIALOG] set_llm resolved instance', JSON.stringify({
+                dialogCode: this.dialog_code || null,
+                sessionId: this.session_id || null,
+                resolvedProvider: this.llm_provider,
+                resolvedModelName,
+                llmClass: this.llm.constructor?.name ?? null
+            }));
+        }
         return this;
     }
 
@@ -925,11 +955,37 @@ ${response.content}`;
     }
 
     static get_llm({modelName, temperature = 0, schema, provider} = {}) {
+        const rawConfig = arguments.length > 0 ? (arguments[0] ?? {}) : {};
+        const providerWasProvided = Object.prototype.hasOwnProperty.call(rawConfig, 'provider');
+        const modelNameWasProvided = Object.prototype.hasOwnProperty.call(rawConfig, 'modelName');
+        const temperatureWasProvided = Object.prototype.hasOwnProperty.call(rawConfig, 'temperature');
         // Определяем провайдер: из параметра, переменной окружения или дефолт
         const resolvedProvider = (provider || process.env.DEFAULT_LLM_PROVIDER || 'openai').toLowerCase();
+        console.info('[DIALOG][get_llm] Resolving LLM', JSON.stringify({
+            requestedModel: modelName ?? null,
+            requestedProvider: provider ?? null,
+            resolvedProvider,
+            temperature,
+            providerWasProvided,
+            modelNameWasProvided,
+            temperatureWasProvided,
+            hasSchema: Boolean(schema)
+        }));
         
         // Используем фабрику для создания LLM
         const llm = LLMProviderFactory.create({modelName, temperature, provider: resolvedProvider});
+
+        const llmModelName =
+            llm?.modelName ??
+            llm?.model ??
+            llm?.lc_kwargs?.model ??
+            llm?.lc_kwargs?.modelName ??
+            null;
+        console.info('[DIALOG][get_llm] LLM instance created', JSON.stringify({
+            resolvedProvider,
+            llmClass: llm?.constructor?.name ?? null,
+            resolvedModelName: llmModelName
+        }));
         
         return !!schema ? llm.withStructuredOutput(schema) : llm;
     }
