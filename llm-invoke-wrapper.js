@@ -110,7 +110,7 @@ async function safe_llm_invoke(context, invokeFunction, params, options = {}) {
                     `Dialog: ${context.dialog_code} (${context.alias})\n` +
                     `Total duration: ${totalDuration}ms\n` +
                     `Messages: ${messagesSize.totalChars} chars (${messagesSize.humanReadable}), ${params.messages?.length || 0} messages\n` +
-                    `\n📊 DIAGNOSTIC INFO (send to developers):\n` +
+                    `\n📊 DIAGNOSTIC INFO (send to developers): ` +
                     JSON.stringify({
                         session_id: context.session_id,
                         dialog_code: context.dialog_code,
@@ -129,7 +129,7 @@ async function safe_llm_invoke(context, invokeFunction, params, options = {}) {
                             nodeVersion: process.version,
                             platform: process.platform
                         }
-                    }, null, 2)
+                    })
                 );
                 
                 detailedError.diagnosticInfo = { 
